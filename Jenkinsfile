@@ -251,7 +251,7 @@ pipeline {
         chmod 777 reports/zap || true   # longgar biar gampang nulis
 
         docker run --rm \
-            --user 0:0 \  # jalankan sebagai root supaya bisa nulis ke bind mount
+            --user 0:0 \  
             -v "$PWD/reports/zap":/zap/wrk \
             --network=host \
             ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
