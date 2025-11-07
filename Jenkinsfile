@@ -79,9 +79,7 @@ pipeline {
             TOOLS=/var/jenkins_home/tools/codeql
             VER=2.18.4
 
-            # siapkan folder & binary codeql sekali saja (pakai symlink "current")
-            mkdir -p "$TOOLS"
-            cd "$TOOLS"
+            mkdir -p "$TOOLS" && cd "$TOOLS"
             if [ ! -x current/codeql ]; then
                 echo "📦 Download CodeQL $VER…"
                 curl -L "https://github.com/github/codeql-cli-binaries/releases/download/v${VER}/codeql-linux64.zip" -o codeql.zip
@@ -90,26 +88,18 @@ pipeline {
                 mv tmp/codeql "codeql-${VER}"
                 ln -sfn "codeql-${VER}" current
                 rm -rf tmp codeql.zip
-            else
-                echo "✅ CodeQL CLI sudah ada, skip download."
             fi
 
             cd "$WORKSPACE"
             mkdir -p reports
 
-            # OPSI 1: kalau Go toolchain SUDAH terpasang di agent, pakai ini:
-            # "$TOOLS/current/codeql" database create codeql-db-go \
-            #   --language=go --source-root . --command="go build ./..."
-
-            # OPSI 2 (disarankan kalau agent TIDAK punya Go): build via Docker
             "$TOOLS/current/codeql" database create codeql-db-go \
+                --overwrite \
                 --language=go --source-root . \
                 --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
 
-            # download pack queries (cached di ~/.codeql/packages)
             "$TOOLS/current/codeql" pack download codeql/go-queries
 
-            # analyze (SARIF 2.1.0)
             "$TOOLS/current/codeql" database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
                 --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0 || true
