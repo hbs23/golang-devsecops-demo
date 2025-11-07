@@ -64,35 +64,22 @@ pipeline {
         }
     }
 
-    stage('SAST - Semgrep (Blocking)') {
+   stage('SAST - Semgrep (Blocking)') {
         steps {
             sh '''
         set -e
         mkdir -p reports
+        chmod 777 reports || true
 
-        echo "== Diagnostic inside container =="
-        docker run --rm -v "$PWD":/src -w /src alpine:3.20 sh -lc "pwd; ls -lah; echo '--- go files ---'; find . -maxdepth 3 -type f -name '*.go' -print || true"
+        echo "== Diagnostic: cek file dari dalam container =="
+        docker run --rm -v "$PWD":/src -w /src alpine:3.20 sh -lc "pwd; ls -lah; echo '--- Go files ---'; find . -maxdepth 3 -type f -name '*.go' -print || true"
 
-        echo "== Run Semgrep (git mode, as Jenkins UID/GID) =="
-        # Jalankan sebagai user jenkins supaya 'git ls-files' jalan; wrap perintah dgn \"...\"
+        echo "== Jalankan Semgrep (root user, tapi folder writeable) =="
         set +e
-        docker run --rm -u $(id -u):$(id -g) -v "$PWD":/src -w /src returntocorp/semgrep:latest sh -lc "
-        semgrep \
-            --config p/golang \
-            --config p/security-audit \
-            --config p/owasp-top-ten \
-            --exclude 'reports/**' \
-            --exclude '.trivycache/**' \
-            --exclude 'node_modules/**' \
-            --json -o reports/semgrep.json .
-        "
-        rc=$?
-        set -e
-
-        # Kalau masih kosong (misal git ls-files bermasalah), fallback: scan file .go eksplisit
-        if [ ! -s reports/semgrep.json ]; then
-        echo "[Semgrep] fallback: scan semua *.go secara eksplisit (non-git)"
-        docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest sh -lc "
+        docker run --rm \
+        -v "$PWD":/src -w /src \
+        returntocorp/semgrep:latest sh -lc "
+            chmod -R 777 /src/reports || true
             semgrep \
             --config p/golang \
             --config p/security-audit \
@@ -100,16 +87,16 @@ pipeline {
             --exclude 'reports/**' \
             --exclude '.trivycache/**' \
             --exclude 'node_modules/**' \
-            --include '**/*.go' \
-            --include '*.go' \
+            --no-git-ignore \
             --json -o reports/semgrep.json .
-        " || true
-        fi
+        "
+        rc=$?
+        set -e
 
-        # Pastikan file selalu ada agar archive & gate aman
+        # Fallback: kalau report belum ada, buat kosong
         [ -s reports/semgrep.json ] || echo '{}' > reports/semgrep.json
 
-        # Gate: fail jika ada finding (one-liner, no indent)
+        # Gate
         python3 -c "import json,sys; d=json.load(open('reports/semgrep.json')); n=len(d.get('results',[])); print(f'[Semgrep] findings={n}'); sys.exit(1 if n>0 else 0)"
             '''
         }
