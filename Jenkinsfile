@@ -8,6 +8,12 @@ pipeline {
   }
 
   stages {
+    stage('Prep workspace') {
+      steps {
+        sh 'chmod -R u+rwX . || true'
+        deleteDir()
+      }
+    }
     stage('Checkout') {
       steps {
         checkout scm
@@ -179,11 +185,11 @@ pipeline {
             sh '''
             set -e
 
-            # 1) Network khusus CI
+            # 1) Network khusus CI (idempotent)
             docker network inspect ci-net >/dev/null 2>&1 || docker network create ci-net
 
             # 2) Start app di network yang sama
-            docker rm -f go-praktikum-api || true
+            docker rm -f go-praktikum-api >/dev/null 2>&1 || true
             docker run -d --name go-praktikum-api --network ci-net -p 9000:9000 go-praktikum-api:46
 
             # 3) Tunggu health ready (maks 30x, 2 detik)
@@ -205,32 +211,44 @@ pipeline {
             # 4) Siapkan folder report
             mkdir -p reports/zap
             chmod 777 reports/zap || true
-            rm -f reports/zap/zap.yaml || true
 
-            # 5) Jalankan ZAP di network yang sama, target NAMA container
-            docker run --rm \
-                --user 0:0 \
+            # 5) Jalankan ZAP (named container) + tangkap stdout ke txt
+            cname=zapscan-$$
+            set +e
+            docker run --name "$cname" \
                 --network ci-net \
                 -v "$PWD/reports/zap":/zap/wrk \
-                -w /zap/wrk \
                 ghcr.io/zaproxy/zaproxy:stable \
                 zap-baseline.py \
                 -t http://go-praktikum-api:9000 \
-                -r zap-baseline.html \
-                -J zap-baseline.json \
-                -m 5 || true   # batasi durasi baseline 5 menit (opsional)
+                -r /zap/wrk/zap-baseline.html \
+                -J /zap/wrk/zap-baseline.json \
+                -m 5 \
+                | tee reports/zap/zap-baseline.txt
+            rc=$?
+            echo "[ZAP] exit code = $rc"
+            set -e
 
-            echo "Isi reports/zap:"
+            # 6) Fallback: copy apapun dari /zap/wrk (kalau volume tidak terisi)
+            docker cp "$cname":/zap/wrk/. reports/zap/ >/dev/null 2>&1 || true
+            docker rm -f "$cname" >/dev/null 2>&1 || true
+
+            # 7) Pastikan ada artefak minimal
+            [ -s reports/zap/zap-baseline.html ] || cp reports/zap/zap-baseline.txt reports/zap/zap-baseline.html
+            [ -s reports/zap/zap-baseline.json ] || echo '{}' > reports/zap/zap-baseline.json
+
+            echo "== Isi reports/zap =="
             ls -lah reports/zap || true
             '''
         }
         post {
             always {
-            archiveArtifacts artifacts: 'reports/zap/zap-baseline.*', allowEmptyArchive: true, onlyIfSuccessful: false
+            archiveArtifacts artifacts: 'reports/zap/**', allowEmptyArchive: false, onlyIfSuccessful: false
             sh 'docker rm -f go-praktikum-api || true'
             }
         }
-    }
+        }
+
   }
 
   post {
