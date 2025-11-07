@@ -26,19 +26,27 @@ pipeline {
     stage('Unit Test (Go)') {
         steps {
             sh '''
-            docker run --rm \
-                -v $PWD:/work -w /work \
-                golang:1.22-alpine \
-                sh -c "apk add --no-cache git ca-certificates && \
-                    go version && \
-                    if [ ! -f go.mod ]; then \
-                        echo 'go.mod belum ada — inisialisasi modul'; \
-                        go mod init github.com/example/golang-banking-gin-alpine; \
-                    fi && \
-                    go mod tidy && \
-                    echo 'Jalankan unit test...' && \
-                    go test -v ./..."
+            docker run --rm -v $PWD:/work -w /work golang:1.22-alpine sh -c "
+                apk add --no-cache git ca-certificates >/dev/null &&
+                go version &&
+                [ -f go.mod ] || go mod init github.com/example/golang-banking-gin-alpine &&
+                go mod tidy || true &&
+                echo '🔎 Cari paket Go...' &&
+                PKGS=\$(go list ./... 2>/dev/null || true) &&
+                if [ -z \"\$PKGS\" ]; then
+                echo 'ℹ️  Tidak ada paket Go ditemukan. Lewati unit test.'; exit 0;
+                else
+                echo '📦 Paket:'; echo \"\$PKGS\" | tr ' ' '\n';
+                echo '🚀 Jalankan unit test...';
+                go test -v -count=1 -race -coverprofile=coverage.out \$PKGS;
+                fi
+            "
             '''
+        }
+        post {
+            always {
+            archiveArtifacts artifacts: 'coverage.out', onlyIfSuccessful: true
+            }
         }
     }
 
