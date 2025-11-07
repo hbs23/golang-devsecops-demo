@@ -74,57 +74,56 @@ pipeline {
 
     stage('SAST - CodeQL (Security Extended)') {
         environment {
-            TOOLS = '/var/jenkins_home/tools/codeql'
-            CODEQL_VER = '2.18.4'
-            BUNDLE = '/var/jenkins_home/tools/codeql/current'
-            PACKS  = "${env.HOME}/.codeql/packages"
-            SEARCH = '/var/jenkins_home/tools/codeql/current/qlpacks:' + "${env.HOME}/.codeql/packages"
+            TOOLS  = '/var/jenkins_home/tools/codeql'
+            VER    = '2.18.4'
+            BUNDLE = "${env.TOOLS}/current"            // folder CodeQL bundle
+            PACKS  = "${env.HOME}/.codeql/packages"    // cache packs yg diunduh
         }
         steps {
             withCredentials([string(credentialsId: 'github-secret', variable: 'GITHUB_TOKEN')]) {
             sh '''
                 set -e
 
-                # 1) Pastikan bundle ada
-                mkdir -p "$TOOLS"
-                cd "$TOOLS"
+                # ========== 1) Pastikan CodeQL bundle ada ==========
+                mkdir -p "$TOOLS" "$PACKS"
                 if [ ! -x "$BUNDLE/codeql" ]; then
-                echo "📦 Download CodeQL BUNDLE ${CODEQL_VER}…"
-                curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
-                rm -rf "codeql-${CODEQL_VER}" tmp && mkdir -p tmp
+                echo "📦 Download CodeQL BUNDLE ${VER}…"
+                curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
+                rm -rf "$TOOLS/codeql-${VER}" tmp && mkdir -p tmp
                 tar -xzf codeql-bundle.tgz -C tmp
-                mv tmp/codeql "codeql-${CODEQL_VER}"
-                ln -sfn "codeql-${CODEQL_VER}" current
+                mv tmp/codeql "$TOOLS/codeql-${VER}"
+                ln -sfn "$TOOLS/codeql-${VER}" "$BUNDLE"
                 rm -rf tmp codeql-bundle.tgz
                 else
                 echo "✅ CodeQL bundle sudah ada."
                 fi
 
-                mkdir -p "$PACKS"
+                # Search path: biarkan resolver cari di ROOT bundle & cache packs
+                SEARCH="$BUNDLE:$PACKS"
 
-                echo "🔎 Packs terlihat (sebelum):"
-                "$BUNDLE/codeql" resolve qlpacks --search-path="$SEARCH" || true
-                echo "🔎 Languages terlihat (sebelum):"
-                "$BUNDLE/codeql" resolve languages --search-path="$SEARCH" || true
-
-                # 2) BERSIHKAN cache go* agar unduhan dipaksa
+                # ========== 2) Paksa download extractor/query Go (dengan auth GHCR) ==========
+                echo "🧹 Bersihkan cache pack Go lama (jika ada)…"
                 rm -rf "$PACKS"/codeql/go* || true
 
-                # 3) Paksa download pack bahasa & queries Go (dengan token GitHub)
-                #    Note: codeql/go adalah pack publik yang mengandung extractor
-                echo "⬇️  Download packs codeql/go & codeql/go-queries…"
-                GITHUB_TOKEN="$GITHUB_TOKEN" "$BUNDLE/codeql" pack download codeql/go --search-path="$SEARCH" --verbosity=progress+++
-                GITHUB_TOKEN="$GITHUB_TOKEN" "$BUNDLE/codeql" pack download codeql/go-queries --search-path="$SEARCH" --verbosity=progress+++
+                echo "🔐 Set credentials untuk registry GHCR…"
+                export CODEQL_REGISTRY_AUTH='{"https://ghcr.io":{"token":"'"$GITHUB_TOKEN"'"}}'
 
-                echo "🔎 Packs terlihat (sesudah):"
-                "$BUNDLE/codeql" resolve qlpacks --search-path="$SEARCH"
-                echo "🔎 Languages terlihat (sesudah):"
+                echo "⬇️  Download pack bahasa Go (extractor) …"
+                "$BUNDLE/codeql" pack download codeql/go --search-path="$SEARCH" --verbosity=progress+++
+
+                echo "⬇️  Download pack queries Go …"
+                "$BUNDLE/codeql" pack download codeql/go-queries --search-path="$SEARCH" --verbosity=progress+++
+
+                echo "🔎 Packs terbaca:"
+                "$BUNDLE/codeql" resolve qlpacks --search-path="$SEARCH" | grep -E '^codeql/go($|-queries )' || true
+
+                echo "🔎 Languages terbaca (harus ada 'go'):"
                 "$BUNDLE/codeql" resolve languages --search-path="$SEARCH"
 
+                # ========== 3) Build CodeQL DB (pakai Docker Go) ==========
                 cd "$WORKSPACE"
                 mkdir -p reports
 
-                # 4) Buat database (build Go via Docker image golang)
                 "$BUNDLE/codeql" database create codeql-db-go \
                 --overwrite \
                 --language=go \
@@ -132,11 +131,13 @@ pipeline {
                 --search-path="$SEARCH" \
                 --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
 
-                # 5) Analisis → SARIF 2.1.0
+                # ========== 4) Analyze & hasil ke SARIF 2.1.0 ==========
                 "$BUNDLE/codeql" database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
                 --search-path="$SEARCH" \
-                --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0 || true
+                --format=sarifv2.1.0 \
+                --output reports/codeql.sarif \
+                --threads=0 || true
             '''
             }
         }
