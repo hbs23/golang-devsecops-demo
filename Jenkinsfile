@@ -70,7 +70,7 @@ pipeline {
         sh '''
           set -e
           mkdir -p reports
-          docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest \
+          docker run --rm -v "$PWD" -w /src returntocorp/semgrep:latest \
             semgrep --config p/owasp-top-ten --config p/golang \
                     --exclude node_modules --exclude reports --exclude .trivycache \
                     --json . > reports/semgrep.json
