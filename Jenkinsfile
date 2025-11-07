@@ -228,7 +228,7 @@ pipeline {
             -v "$PWD/reports/zap":/zap/wrk \
             --network=host \
             ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-              -t "http://localhost:${APP_PORT}" \
+              -t "http://go-praktikum-api:${APP_PORT}" \
               -r zap-baseline.html \
               -J zap-baseline.json || true
 
