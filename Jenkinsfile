@@ -82,7 +82,7 @@ pipeline {
             mkdir -p "$TOOLS"
             cd "$TOOLS"
 
-            # Pakai BUNDLE (sudah include extractor), bukan CLI zip
+            # Pastikan pakai BUNDLE (bukan CLI)
             if [ ! -x current/codeql ]; then
                 echo "📦 Download CodeQL BUNDLE $VER…"
                 curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
@@ -95,23 +95,29 @@ pipeline {
                 echo "✅ CodeQL bundle sudah ada."
             fi
 
-            # Sanity check
-            ls -l "$TOOLS/current"
-            "$TOOLS/current/codeql" version
+            # ---- pastikan extractor Go tersedia ----
+            echo "🔎 Cek extractor..."
+            if ! "$TOOLS/current/codeql" resolve languages | grep -q "^go$"; then
+                echo "⬇️  Download packs Go (extractor + libraries + queries)..."
+                "$TOOLS/current/codeql" pack download codeql/go-extractor
+                "$TOOLS/current/codeql" pack download codeql/go-all
+                "$TOOLS/current/codeql" pack download codeql/go-queries
+                # verifikasi lagi
+                "$TOOLS/current/codeql" resolve languages
+            fi
 
             cd "$WORKSPACE"
             mkdir -p reports
 
-            # Build DB (pakai Docker golang biar gak perlu Go di agent)
+            # build DB (pakai Docker golang biar agent tak perlu Go)
             "$TOOLS/current/codeql" database create codeql-db-go \
                 --overwrite \
                 --language=go --source-root . \
                 --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
 
-            # Download pack queries (cache di ~/.codeql/packages)
+            # (opsional) pastikan query packs ada
             "$TOOLS/current/codeql" pack download codeql/go-queries
 
-            # Analyze → SARIF 2.1.0
             "$TOOLS/current/codeql" database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
                 --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0 || true
