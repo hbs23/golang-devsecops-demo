@@ -92,89 +92,88 @@ PY
 
     // ===== SCA FS (Blocking) =====
     stage('SCA - Trivy (Repo deps) - Blocking') {
-      steps {
-        sh '''
-          set +e
-          mkdir -p reports .trivycache
-          docker run --rm -u $(id -u):$(id -g) \
-            -v "$PWD":/work -w /work \
-            -v "$PWD/.trivycache":/root/.cache/trivy \
-            aquasec/trivy:latest fs . \
-              --scanners vuln \
-              --severity CRITICAL,HIGH \
-              --format sarif \
-              --exit-code 1 \
-              > reports/trivy-fs.sarif
-          rc=$?
-          echo "[Trivy FS] exit code=$rc"
-          set -e
-          exit $rc
-        '''
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'reports/trivy-fs.sarif', onlyIfSuccessful: false
+        steps {
+            sh '''
+            set +e
+            mkdir -p reports .trivycache
+            docker run --rm \
+                -v "$PWD":/work -w /work \
+                -v "$PWD/.trivycache":/root/.cache/trivy \
+                aquasec/trivy:latest fs . \
+                --scanners vuln \
+                --severity CRITICAL,HIGH \
+                --format sarif \
+                --exit-code 1 \
+                > reports/trivy-fs.sarif
+            rc=$?
+            echo "[Trivy FS] exit code=$rc"
+            set -e
+            exit $rc
+            '''
         }
-      }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/trivy-fs.sarif', onlyIfSuccessful: false
+            }
+        }
     }
 
     // ===== SCA Image (Blocking) =====
     stage('SCA - Trivy (Image) - Blocking') {
-      steps {
-        sh '''
-          set +e
-          mkdir -p reports .trivycache
-          docker run --rm -u $(id -u):$(id -g) \
-            -v "$PWD":/work -w /work \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD/.trivycache":/root/.cache/trivy \
-            aquasec/trivy:latest image "${IMAGE_TAG}" \
-              --severity CRITICAL,HIGH \
-              --pkg-types os,library \
-              --ignore-unfixed \
-              --scanners vuln \
-              --format sarif \
-              --exit-code 1 \
-              --quiet \
-              > reports/trivy-image.sarif
-          rc=$?
-          echo "[Trivy Image] exit code=$rc"
-          set -e
-          exit $rc
-        '''
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'reports/trivy-image.sarif', onlyIfSuccessful: false
+        steps {
+            sh '''
+            set +e
+            mkdir -p reports .trivycache
+            docker run --rm \
+                -v "$PWD":/work -w /work \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                -v "$PWD/.trivycache":/root/.cache/trivy \
+                aquasec/trivy:latest image "${IMAGE_TAG}" \
+                --severity CRITICAL,HIGH \
+                --pkg-types os,library \
+                --ignore-unfixed \
+                --scanners vuln \
+                --format sarif \
+                --exit-code 1 \
+                --quiet \
+                > reports/trivy-image.sarif
+            rc=$?
+            echo "[Trivy Image] exit code=$rc"
+            set -e
+            exit $rc
+            '''
         }
-      }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/trivy-image.sarif', onlyIfSuccessful: false
+            }
+        }
     }
 
-    // ===== SBOM (Non-blocking, tetap diarsip) =====
     stage('SBOM - Trivy (CycloneDX)') {
-      steps {
-        sh '''
-          set -e
-          mkdir -p reports .trivycache
-          docker run --rm -u $(id -u):$(id -g) \
-            -v "$PWD":/work -w /work \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD/.trivycache":/root/.cache/trivy \
-            aquasec/trivy:latest image "${IMAGE_TAG}" \
-              --format cyclonedx \
-              --pkg-types os,library \
-              --ignore-unfixed \
-              --scanners vuln,license \
-              --quiet \
-              > reports/sbom.cdx.json
-          ls -lah reports || true
-        '''
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'reports/sbom.cdx.json', onlyIfSuccessful: false
+        steps {
+            sh '''
+            set -e
+            mkdir -p reports .trivycache
+            docker run --rm \
+                -v "$PWD":/work -w /work \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                -v "$PWD/.trivycache":/root/.cache/trivy \
+                aquasec/trivy:latest image "${IMAGE_TAG}" \
+                --format cyclonedx \
+                --pkg-types os,library \
+                --ignore-unfixed \
+                --scanners vuln,license \
+                --quiet \
+                > reports/sbom.cdx.json
+            ls -lah reports || true
+            '''
         }
-      }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/sbom.cdx.json', onlyIfSuccessful: false
+            }
+        }
     }
 
     // ===== DAST (Blocking on WARN/FAIL) =====
