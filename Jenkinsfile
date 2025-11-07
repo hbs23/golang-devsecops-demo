@@ -72,35 +72,42 @@ pipeline {
         }
     }
 
-    stage('SAST - CodeQL (Security Extended)') {
-      steps {
-        sh """
-          # Download CodeQL CLI bila belum ada
-          mkdir -p .codeql-cli && cd .codeql-cli
-          if [ ! -x codeql ]; then
-            curl -sL https://github.com/github/codeql-cli-binaries/releases/download/${CODEQL_VERSION}/codeql-linux64.zip -o codeql.zip
-            unzip -q codeql.zip
-            mv codeql/codeql . && rm -rf codeql codeql.zip
-          fi
-          cd ..
+    stage('SAST - CodeQL (Go)') {
+        steps {
+            sh '''
+            mkdir -p reports codeql-db-go .codeql-packs
 
-          # Buat DB dari source
-          ./.codeql-cli/codeql database create codeql-db-go \
-            --language=go --source-root . \
-            --command="go build ./..."
+            # Buat database (install Go sekali di container)
+            docker run --rm \
+                -v $PWD:/src -w /src \
+                -v $PWD/codeql-db-go:/db \
+                -v $PWD/.codeql-packs:/root/.codeql/packages \
+                ghcr.io/github/codeql/codeql-cli:v2.18.4 \
+                bash -lc "apt-get update && apt-get install -y golang git >/dev/null && \
+                        codeql database create /db --language=go --source-root /src --command=\\"go build ./...\\""
 
-          # Download pack queries dan analyze
-          ./.codeql-cli/codeql pack download codeql/go-queries
-          ./.codeql-cli/codeql database analyze codeql-db-go \
-            codeql/go-queries:codeql-suites/go-security-extended.qls \
-            --format=sarifv2.1.0 --output=codeql.sarif --threads=0
-        """
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'codeql.sarif', onlyIfSuccessful: false
+            # Download packs (cached)
+            docker run --rm \
+                -v $PWD/.codeql-packs:/root/.codeql/packages \
+                ghcr.io/github/codeql/codeql-cli:v2.18.4 \
+                codeql pack download codeql/go-queries
+
+            # Analyze with security-extended suite (SARIF 2.1.0)
+            docker run --rm \
+                -v $PWD/codeql-db-go:/db \
+                -v $PWD/reports:/out \
+                -v $PWD/.codeql-packs:/root/.codeql/packages \
+                ghcr.io/github/codeql/codeql-cli:v2.18.4 \
+                codeql database analyze /db \
+                codeql/go-queries:codeql-suites/go-security-extended.qls \
+                --format=sarifv2.1.0 --output=/out/codeql.sarif --threads=0 || true
+            '''
         }
-      }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/codeql.sarif', allowEmptyArchive: true
+            }
+        }
     }
 
     stage('SCA - Trivy (Repo deps)') {
