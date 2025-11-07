@@ -72,18 +72,15 @@ pipeline {
             ls -lah
 
             docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest sh -lc "
-                semgrep \
-                --config p/owasp-top-ten \
+            semgrep \
                 --config p/golang \
-                --exclude 'reports/**' \
-                --exclude '.trivycache/**' \
-                --exclude 'node_modules/**' \
-                --include '**/*.go' \
-                --include '*.go' \
-                --verbose \
+                --config p/security-audit \
+                --config p/secrets \
+                --config p/owasp-top-ten \
+                --exclude 'reports/**' --exclude '.trivycache/**' --exclude 'node_modules/**' \
+                --no-git-ignore \
                 --json -o reports/semgrep.json .
             "
-
             # Gate: fail kalau ada finding
             python3 - <<'PY'
         import json, sys
