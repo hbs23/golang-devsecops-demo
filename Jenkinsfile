@@ -64,7 +64,7 @@ pipeline {
         }
     }
 
-    sstage('SAST - Semgrep (Blocking)') {
+    stage('SAST - Semgrep (Blocking)') {
         steps {
             sh '''
         set -e
