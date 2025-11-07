@@ -1,0 +1,6 @@
+codeql-db-go/
+mysql/
+reports/
+*.sarif
+*.html
+*.json
