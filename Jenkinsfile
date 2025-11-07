@@ -172,21 +172,25 @@ pipeline {
     stage('SCA - Trivy (Image)') {
       steps {
             sh '''
-            set -e
-            mkdir -p reports
-            docker run --rm \
-                -v "$PWD":/work -w /work \
-                -v /var/run/docker.sock:/var/run/docker.sock \
-                aquasec/trivy:latest image "$IMAGE_TAG" \
-                --severity CRITICAL,HIGH \
-                --pkg-types os,library \
-                --ignore-unfixed \
-                --scanners vuln \
-                --format sarif \
-                --exit-code 0 \
-                --output /work/reports/trivy-image.sarif
-            echo "Isi folder reports:"
-            ls -lah reports || true
+                set -e
+                mkdir -p reports .trivycache
+
+                docker run --rm \
+                    -v "$PWD":/work -w /work \
+                    -v /var/run/docker.sock:/var/run/docker.sock \
+                    -v "$PWD/.trivycache":/root/.cache/trivy \
+                    aquasec/trivy:latest image "go-praktikum-api:31" \
+                    --severity CRITICAL,HIGH \
+                    --pkg-types os,library \
+                    --ignore-unfixed \
+                    --scanners vuln \
+                    --exit-code 0 \
+                    --format sarif \
+                    --quiet \
+                    > reports/trivy-image.sarif
+
+                echo "Isi folder reports:"
+                ls -lah reports || true
             '''
      }
       post {
