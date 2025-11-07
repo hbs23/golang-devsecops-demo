@@ -215,10 +215,11 @@ pipeline {
                 --pkg-types os,library \
                 --ignore-unfixed \
                 --scanners vuln,license \
-                --exit-code 0 \
-                --output /work/reports/sbom.cdx.json
+                --quiet \
+                > reports/sbom.cdx.json
 
-            echo "Isi folder reports:" && ls -lah reports || true
+            echo "Isi folder reports:"
+            ls -lah reports || true
             '''
         }
         post {
