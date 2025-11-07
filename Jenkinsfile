@@ -158,22 +158,48 @@ pipeline {
       }
     }
 
-    stage('Run App for DAST') {
-      steps {
-        sh """
-          # Jalankan container app di background untuk DAST
-          docker run -d --rm --name ${APP_NAME} -p ${APP_PORT}:${APP_PORT} ${IMAGE_TAG}
+    stage('Run app & DAST') {
+        steps {
+            sh '''
+            set -e
 
-          # Health-check sederhana (maks 60 detik)
-          for i in \$(seq 1 30); do
-            if curl -sf http://localhost:${APP_PORT}/health >/dev/null 2>&1 || \
-               curl -sf http://localhost:${APP_PORT}/ >/dev/null 2>&1; then
-              echo 'App is ready'; break
-            fi
-            echo 'Waiting app...'; sleep 2
-          done
-        """
-      }
+            # 1) Network khusus CI
+            docker network inspect ci-net >/dev/null 2>&1 || docker network create ci-net
+
+            # 2) Start app di network yang sama
+            docker rm -f go-praktikum-api || true
+            docker run -d --name go-praktikum-api --network ci-net -p 9000:9000 go-praktikum-api:46
+
+            # 3) Tunggu health ready (dari host masih bisa curl ke 127.0.0.1:9000)
+            for i in $(seq 1 30); do
+                if curl -sf http://127.0.0.1:9000/health >/dev/null; then
+                echo "App healthy"
+                break
+                fi
+                sleep 2
+            done
+
+            mkdir -p reports/zap
+            chmod 777 reports/zap
+
+            # 4) Jalankan ZAP di network yang sama, targetkan NAMA container
+            docker run --rm \
+                --network ci-net \
+                -v "$PWD/reports/zap":/zap/wrk \
+                -w /zap/wrk \
+                ghcr.io/zaproxy/zaproxy:stable \
+                zap-baseline.py -t http://go-praktikum-api:9000 -r zap-baseline.html -J zap-baseline.json || true
+
+            echo "Isi reports/zap:"
+            ls -lah reports/zap || true
+            '''
+        }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/zap/zap-baseline.*', allowEmptyArchive: true, onlyIfSuccessful: false
+            sh 'docker rm -f go-praktikum-api || true'
+            }
+        }
     }
 
     stage('DAST - OWASP ZAP (Baseline)') {
