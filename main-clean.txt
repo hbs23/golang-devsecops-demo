@@ -1,4 +1,4 @@
-// secure_bank_lab.go
+// main.go
 package main
 
 import (
@@ -6,7 +6,6 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"errors"
@@ -29,23 +28,23 @@ import (
 
 var db *sql.DB
 
-// Secrets must come from environment in production
+// Secrets must be provided via environment
 var jwtSecret = getenv("JWT_SECRET", "")
-var adminAPIKey = getenv("ADMIN_API_KEY", "")
+var encKeyHex = getenv("ENC_KEY_HEX", "")
 
 type Account struct {
-	ID         int64 `json:"id"`
-	UserID     int64 `json:"user_id"`
-	Number     string
-	BalanceCts int64 `json:"balance_cents"` // money in cents
+	ID         int64  `json:"id"`
+	UserID     int64  `json:"user_id"`
+	Number     string `json:"number"`
+	BalanceCts int64  `json:"balance_cents"`
 }
 
 func main() {
 	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET must be set in env")
+		log.Fatal("JWT_SECRET must be set")
 	}
-	if adminAPIKey == "" {
-		log.Println("WARN: ADMIN_API_KEY not set - admin endpoints will be disabled")
+	if encKeyHex == "" {
+		log.Println("WARN: ENC_KEY_HEX not set - encrypt endpoint will be disabled")
 	}
 
 	user := getenv("DB_USER", "root")
@@ -65,12 +64,11 @@ func main() {
 
 	r := gin.Default()
 
-	// Public
 	r.GET("/", home)
 	r.GET("/ping", ping)
-	r.POST("/auth/login", login) // secure login -> returns JWT
 
-	// Protected
+	r.POST("/auth/login", login) // secure login -> JWT with exp
+
 	auth := r.Group("/", authMiddleware())
 	{
 		auth.GET("/me/balance", meBalance)
@@ -78,14 +76,12 @@ func main() {
 		auth.GET("/accounts/:id", getAccountByID)
 	}
 
-	// Safe utility endpoints
+	// safe utilities
 	r.GET("/hash", sha256Hash)
-	r.POST("/encrypt", encryptAESGCM) // safer encryption
+	r.POST("/encrypt", encryptAESGCM)
 
-	// Admin: requires admin API key header (separate from JWT)
-	if adminAPIKey != "" {
-		r.GET("/admin/export-logs", adminMiddleware(), exportLogs)
-	}
+	// safe upload example (commented out endpoint if you don't want it exposed)
+	r.POST("/upload", uploadHandler)
 
 	addr := getenv("ADDR", ":9000")
 	log.Printf("Listening at %s", addr)
@@ -104,59 +100,53 @@ func ping(c *gin.Context) { c.String(http.StatusOK, "pong") }
 func home(c *gin.Context) {
 	html := `<html><head><title>Banking Lab - Secure</title></head><body>
 	<h3>Golang Banking Secure Lab (Gin)</h3>
-	<p>Safe endpoints:</p>
 	<ul>
 	<li>POST /auth/login (username, password) → returns JWT (expires)</li>
 	<li>GET /me/balance → JWT required</li>
 	<li>POST /transfer → JWT + ownership checks</li>
-	<li>GET /accounts/:id → JWT + ownership check (unless admin)</li>
+	<li>GET /accounts/:id → JWT + ownership check</li>
 	<li>GET /hash?data=x → SHA-256 hex</li>
 	<li>POST /encrypt (data) → AES-GCM (returns hex)</li>
+	<li>POST /upload → secure upload</li>
 	</ul></body></html>`
 	c.Data(200, "text/html; charset=utf-8", []byte(html))
 }
 
-// ----------------------- Auth/Login -----------------------
+// ---------------- auth ----------------
 
 func login(c *gin.Context) {
 	username := c.PostForm("username")
 	password := c.PostForm("password")
-
 	if username == "" || password == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username & password required"})
 		return
 	}
 
-	// Lookup user; expecting table users(id INT, username VARCHAR, password_hash VARCHAR)
+	// Example user lookup: table users(id, username, password_hash)
 	var id int64
 	var pwHash string
 	err := db.QueryRow("SELECT id, password_hash FROM users WHERE username = ? LIMIT 1", username).Scan(&id, &pwHash)
 	if err != nil {
-		// don't reveal whether user exists
+		// avoid leaking which usernames exist
 		log.Printf("login lookup err: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 
-	// Compare bcrypt hashes
 	if bcrypt.CompareHashAndPassword([]byte(pwHash), []byte(password)) != nil {
-		// use constant time compare of a dummy value to help against timing leaks
-		_ = subtle.ConstantTimeCompare([]byte("dummy"), []byte("dummy"))
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 
-	// Create JWT with expiry and subject as user id
 	claims := jwt.MapClaims{
 		"sub": id,
 		"iat": time.Now().Unix(),
 		"exp": time.Now().Add(24 * time.Hour).Unix(),
-		"nbf": time.Now().Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString([]byte(jwtSecret))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "token error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "token generation error"})
 		return
 	}
 	c.JSON(200, gin.H{"token": signed})
@@ -173,7 +163,6 @@ func authMiddleware() gin.HandlerFunc {
 			return
 		}
 		t, err := jwt.Parse(auth, func(t *jwt.Token) (interface{}, error) {
-			// ensure alg is HMAC
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method")
 			}
@@ -185,43 +174,26 @@ func authMiddleware() gin.HandlerFunc {
 		}
 		claims, ok := t.Claims.(jwt.MapClaims)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid claims"})
 			return
 		}
-		// extract sub as float64 or string
+		sub := claims["sub"]
 		var uid int64
-		switch s := claims["sub"].(type) {
+		switch v := sub.(type) {
 		case float64:
-			uid = int64(s)
+			uid = int64(v)
 		case int64:
-			uid = s
-		case string:
-			v, _ := strconv.ParseInt(s, 10, 64)
 			uid = v
+		case string:
+			uid, _ = strconv.ParseInt(v, 10, 64)
 		default:
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid subject"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid sub"})
 			return
 		}
-		// attach to context
 		c.Set("user_id", uid)
 		c.Next()
 	}
 }
-
-// ----------------------- Admin Middleware -----------------------
-
-func adminMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		key := c.GetHeader("X-Admin-API-Key")
-		if key == "" || key != adminAPIKey {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin key required"})
-			return
-		}
-		c.Next()
-	}
-}
-
-// ----------------------- Helpers -----------------------
 
 func getUserID(c *gin.Context) (int64, error) {
 	v, ok := c.Get("user_id")
@@ -230,12 +202,12 @@ func getUserID(c *gin.Context) (int64, error) {
 	}
 	uid, ok := v.(int64)
 	if !ok {
-		return 0, errors.New("invalid user id type")
+		return 0, errors.New("invalid user id")
 	}
 	return uid, nil
 }
 
-// ----------------------- Endpoints -----------------------
+// ---------------- accounts ----------------
 
 func meBalance(c *gin.Context) {
 	uid, err := getUserID(c)
@@ -243,8 +215,8 @@ func meBalance(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
 		return
 	}
-	var balCts int64
-	err = db.QueryRow("SELECT balance_cents FROM accounts WHERE user_id = ? LIMIT 1", uid).Scan(&balCts)
+	var bal int64
+	err = db.QueryRow("SELECT balance_cents FROM accounts WHERE user_id = ? LIMIT 1", uid).Scan(&bal)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(200, gin.H{"balance_cents": 0})
@@ -253,7 +225,7 @@ func meBalance(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	c.JSON(200, gin.H{"balance_cents": balCts})
+	c.JSON(200, gin.H{"balance_cents": bal})
 }
 
 func getAccountByID(c *gin.Context) {
@@ -275,7 +247,6 @@ func getAccountByID(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
 		return
 	}
-	// ownership check (user can view own account only)
 	if acc.UserID != uid {
 		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 		return
@@ -283,7 +254,7 @@ func getAccountByID(c *gin.Context) {
 	c.JSON(200, acc)
 }
 
-// transfer: requires ownership of from account; amount provided as decimal string (e.g., "10.50")
+// transfer expects amount as decimal string e.g. "10.50"
 func transfer(c *gin.Context) {
 	uid, _ := getUserID(c)
 	fromID, err := strconv.ParseInt(c.PostForm("from_account_id"), 10, 64)
@@ -301,7 +272,6 @@ func transfer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "amount required"})
 		return
 	}
-	// parse decimal -> cents
 	amtF, err := strconv.ParseFloat(amountStr, 64)
 	if err != nil || amtF <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid amount"})
@@ -309,7 +279,7 @@ func transfer(c *gin.Context) {
 	}
 	amountCts := int64(math.Round(amtF * 100))
 
-	// verify ownership of from account
+	// ownership check
 	var owner int64
 	err = db.QueryRow("SELECT user_id FROM accounts WHERE id = ?", fromID).Scan(&owner)
 	if err != nil {
@@ -321,7 +291,6 @@ func transfer(c *gin.Context) {
 		return
 	}
 
-	// transaction: atomic update with checks
 	tx, err := db.Begin()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db tx error"})
@@ -356,7 +325,6 @@ func transfer(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "insert tx error"})
 		return
 	}
-
 	if err := tx.Commit(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "commit error"})
 		return
@@ -364,7 +332,7 @@ func transfer(c *gin.Context) {
 	c.JSON(200, gin.H{"status": "ok"})
 }
 
-// ----------------------- Safe utilities -----------------------
+// ---------------- utilities ----------------
 
 func sha256Hash(c *gin.Context) {
 	data := c.Query("data")
@@ -373,20 +341,18 @@ func sha256Hash(c *gin.Context) {
 }
 
 func encryptAESGCM(c *gin.Context) {
-	plaintext := []byte(c.PostForm("data"))
-	if len(plaintext) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "data required"})
-		return
-	}
-	// key must be 32 bytes for AES-256 (from env)
-	keyHex := getenv("ENC_KEY_HEX", "")
-	if keyHex == "" {
+	if encKeyHex == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "encryption key not configured"})
 		return
 	}
-	key, err := hex.DecodeString(keyHex)
+	key, err := hex.DecodeString(encKeyHex)
 	if err != nil || len(key) != 32 {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid encryption key"})
+		return
+	}
+	plaintext := []byte(c.PostForm("data"))
+	if len(plaintext) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "data required"})
 		return
 	}
 	block, err := aes.NewCipher(key)
@@ -400,38 +366,41 @@ func encryptAESGCM(c *gin.Context) {
 		return
 	}
 	nonce := make([]byte, aesgcm.NonceSize())
-	_, _ = rand.Read(nonce)
-	ciphertext := aesgcm.Seal(nil, nonce, plaintext, nil)
-	out := append(nonce, ciphertext...)
+	if _, err := rand.Read(nonce); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "nonce error"})
+		return
+	}
+	ct := aesgcm.Seal(nil, nonce, plaintext, nil)
+	out := append(nonce, ct...)
 	c.String(200, hex.EncodeToString(out))
 }
 
-// ----------------------- Admin endpoints -----------------------
+// ---------------- upload (safe) ----------------
 
-func exportLogs(c *gin.Context) {
-	// example: return a safe message or collected logs (don't expose env or secrets)
-	c.Data(200, "text/plain; charset=utf-8", []byte("logs export (redacted)"))
+func uploadHandler(c *gin.Context) {
+	dstDir := "./uploads"
+	path, err := saveUploadedFileSafe(c, "file", dstDir)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"saved": path})
 }
-
-// ----------------------- File upload (safe) -----------------------
 
 func saveUploadedFileSafe(c *gin.Context, formField, dstDir string) (string, error) {
 	f, err := c.FormFile(formField)
 	if err != nil {
 		return "", err
 	}
-	// sanitize filename: keep base name only and use extension from detection
 	orig := filepath.Base(f.Filename)
 	ext := filepath.Ext(orig)
 	if ext == "" {
-		// try to detect from header content-type
 		ct := f.Header.Get("Content-Type")
 		exts, _ := mime.ExtensionsByType(ct)
 		if len(exts) > 0 {
 			ext = exts[0]
 		}
 	}
-	// whitelist characters (simple)
 	name := strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
 			return r

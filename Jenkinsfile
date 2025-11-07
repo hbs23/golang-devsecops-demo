@@ -62,20 +62,19 @@ pipeline {
     }
 
     stage('SAST - Semgrep') {
-      steps {
-        sh '''
-          set -e
-          mkdir -p reports
-          docker run --rm -v $PWD:/src -w /src returntocorp/semgrep:latest \
-            semgrep --config p/owasp-top-ten --config p/golang --config auto \
-            --error --json --output reports/semgrep.json .
-        '''
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'reports/semgrep.json', onlyIfSuccessful: false
+        steps {
+            sh '''
+            mkdir -p reports
+            docker run --rm -v $PWD:/src -w /src returntocorp/semgrep:latest \
+                semgrep --config p/owasp-top-ten --config p/golang \
+                --error --json --output reports/semgrep.json .
+            '''
         }
-      }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/semgrep.json', allowEmptyArchive: true
+            }
+        }
     }
 
     stage('SCA - Trivy (Repo deps)') {
