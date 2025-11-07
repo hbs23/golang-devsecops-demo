@@ -70,13 +70,30 @@ pipeline {
         set -e
         mkdir -p reports
 
-        echo "== List .go dari dalam container (diagnostic) =="
-        docker run --rm -v "${WORKSPACE}":/src -w /src alpine:3.20 sh -lc "find . -maxdepth 3 -type f -name '*.go' -print || true"
+        echo "== Diagnostic inside container =="
+        docker run --rm -v "$PWD":/src -w /src alpine:3.20 sh -lc "pwd; ls -lah; echo '--- go files ---'; find . -maxdepth 3 -type f -name '*.go' -print || true"
 
-        # Jalankan semgrep di luar Git mode (scan semua file), exclude artefak CI
+        echo "== Run Semgrep (git mode, as Jenkins UID/GID) =="
+        # Jalankan sebagai user jenkins supaya 'git ls-files' jalan; wrap perintah dgn \"...\"
         set +e
-        docker run --rm -v "${WORKSPACE}":/src -w /src returntocorp/semgrep:latest sh -lc "
+        docker run --rm -u $(id -u):$(id -g) -v "$PWD":/src -w /src returntocorp/semgrep:latest sh -lc "
         semgrep \
+            --config p/golang \
+            --config p/security-audit \
+            --config p/owasp-top-ten \
+            --exclude 'reports/**' \
+            --exclude '.trivycache/**' \
+            --exclude 'node_modules/**' \
+            --json -o reports/semgrep.json .
+        "
+        rc=$?
+        set -e
+
+        # Kalau masih kosong (misal git ls-files bermasalah), fallback: scan file .go eksplisit
+        if [ ! -s reports/semgrep.json ]; then
+        echo "[Semgrep] fallback: scan semua *.go secara eksplisit (non-git)"
+        docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest sh -lc "
+            semgrep \
             --config p/golang \
             --config p/security-audit \
             --config p/owasp-top-ten \
@@ -85,24 +102,15 @@ pipeline {
             --exclude 'node_modules/**' \
             --include '**/*.go' \
             --include '*.go' \
-            --no-git-ignore \
             --json -o reports/semgrep.json .
-        "
-        rc=$?
-        set -e
+        " || true
+        fi
 
-        # Pastikan file report selalu ada agar gate & archive tidak error
+        # Pastikan file selalu ada agar archive & gate aman
         [ -s reports/semgrep.json ] || echo '{}' > reports/semgrep.json
 
-        # Gate: fail jika ada finding
-        python3 - <<'PY'
-        import json, sys
-        with open('reports/semgrep.json','r') as f:
-            data = json.load(f)
-        n = len(data.get('results', []))
-        print(f"[Semgrep] findings={n}")
-        sys.exit(1 if n > 0 else 0)
-        PY
+        # Gate: fail jika ada finding (one-liner, no indent)
+        python3 -c "import json,sys; d=json.load(open('reports/semgrep.json')); n=len(d.get('results',[])); print(f'[Semgrep] findings={n}'); sys.exit(1 if n>0 else 0)"
             '''
         }
         post {
