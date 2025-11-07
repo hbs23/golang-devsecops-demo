@@ -202,18 +202,29 @@ pipeline {
 
     stage('SBOM - Trivy (CycloneDX)') {
       steps {
-        sh """
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest sbom --format cyclonedx \
-            --output sbom.cdx.json ${IMAGE_TAG}
-        """
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'sbom.cdx.json', onlyIfSuccessful: false
+            sh '''
+            set -e
+            mkdir -p reports .trivycache
+
+            docker run --rm \
+                -v "$PWD":/work -w /work \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                -v "$PWD/.trivycache":/root/.cache/trivy \
+                aquasec/trivy:latest sbom \
+                --image "$IMAGE_TAG" \
+                --format cyclonedx \
+                --scanners vuln \
+                --output /work/reports/sbom.cdx.json
+
+            echo "Isi folder reports:"
+            ls -lah reports || true
+            '''
         }
-      }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/sbom.cdx.json', allowEmptyArchive: false
+            }
+        }
     }
 
     stage('Run App for DAST') {
