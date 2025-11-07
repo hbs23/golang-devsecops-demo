@@ -212,12 +212,11 @@ pipeline {
             mkdir -p reports/zap
             chmod 777 reports/zap || true
 
-            # 5) Jalankan ZAP (named container) + tangkap stdout ke txt
+            # 5) Jalankan ZAP (tanpa bind mount), simpan output di /zap/wrk di dalam container
             cname=zapscan-$$
             set +e
             docker run --name "$cname" \
                 --network ci-net \
-                -v "$PWD/reports/zap":/zap/wrk \
                 ghcr.io/zaproxy/zaproxy:stable \
                 zap-baseline.py \
                 -t http://go-praktikum-api:9000 \
@@ -229,7 +228,7 @@ pipeline {
             echo "[ZAP] exit code = $rc"
             set -e
 
-            # 6) Fallback: copy apapun dari /zap/wrk (kalau volume tidak terisi)
+            # 6) Copy semua hasil dari /zap/wrk (dalam container) ke host
             docker cp "$cname":/zap/wrk/. reports/zap/ >/dev/null 2>&1 || true
             docker rm -f "$cname" >/dev/null 2>&1 || true
 
@@ -247,8 +246,7 @@ pipeline {
             sh 'docker rm -f go-praktikum-api || true'
             }
         }
-        }
-
+    }
   }
 
   post {
