@@ -248,10 +248,10 @@ pipeline {
         sh '''
         set -e
         mkdir -p reports/zap
-        chmod 777 reports/zap || true   # longgar biar gampang nulis
+        chmod 777 reports/zap || true  
 
         docker run --rm \
-            --user 0:0 \  
+            --user 0:0 \
             -v "$PWD/reports/zap":/zap/wrk \
             --network=host \
             ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
@@ -264,7 +264,7 @@ pipeline {
     }
     post {
         always {
-        archiveArtifacts artifacts: 'reports/zap/zap-baseline.*', allowEmptyArchive: false
+            archiveArtifacts artifacts: 'reports/zap/zap-baseline.*', allowEmptyArchive: false
         }
     }
   }
