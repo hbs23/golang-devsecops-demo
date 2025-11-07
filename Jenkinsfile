@@ -72,35 +72,30 @@ pipeline {
         }
     }
 
-    stage('SAST - CodeQL (Go)') {
+    stage('SAST - CodeQL (Security Extended)') {
         steps {
             sh '''
-            mkdir -p reports codeql-db-go .codeql-packs
+            mkdir -p /var/jenkins_home/tools/codeql
+            cd /var/jenkins_home/tools/codeql
 
-            # Buat database (install Go sekali di container)
-            docker run --rm \
-                -v $PWD:/src -w /src \
-                -v $PWD/codeql-db-go:/db \
-                -v $PWD/.codeql-packs:/root/.codeql/packages \
-                ghcr.io/github/codeql/codeql-cli:v2.18.4 \
-                bash -lc "apt-get update && apt-get install -y golang git >/dev/null && \
-                        codeql database create /db --language=go --source-root /src --command=\\"go build ./...\\""
+            if [ ! -x codeql ]; then
+                echo "📦 CodeQL belum ada — download sekali saja..."
+                curl -sL https://github.com/github/codeql-cli-binaries/releases/download/v2.18.4/codeql-linux64.zip -o codeql.zip
+                unzip -q codeql.zip
+                mv codeql/codeql .
+                rm -rf codeql codeql.zip
+            else
+                echo "✅ CodeQL CLI sudah ada, skip download."
+            fi
 
-            # Download packs (cached)
-            docker run --rm \
-                -v $PWD/.codeql-packs:/root/.codeql/packages \
-                ghcr.io/github/codeql/codeql-cli:v2.18.4 \
-                codeql pack download codeql/go-queries
+            cd $WORKSPACE
+            /var/jenkins_home/tools/codeql database create codeql-db-go \
+                --language=go --source-root . --command="go build ./..."
 
-            # Analyze with security-extended suite (SARIF 2.1.0)
-            docker run --rm \
-                -v $PWD/codeql-db-go:/db \
-                -v $PWD/reports:/out \
-                -v $PWD/.codeql-packs:/root/.codeql/packages \
-                ghcr.io/github/codeql/codeql-cli:v2.18.4 \
-                codeql database analyze /db \
+            /var/jenkins_home/tools/codeql pack download codeql/go-queries
+            /var/jenkins_home/tools/codeql database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
-                --format=sarifv2.1.0 --output=/out/codeql.sarif --threads=0 || true
+                --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0
             '''
         }
         post {
