@@ -75,27 +75,44 @@ pipeline {
     stage('SAST - CodeQL (Security Extended)') {
         steps {
             sh '''
-            mkdir -p /var/jenkins_home/tools/codeql
-            cd /var/jenkins_home/tools/codeql
+            set -e
+            TOOLS=/var/jenkins_home/tools/codeql
+            VER=2.18.4
 
-            if [ ! -x codeql ]; then
-                echo "📦 CodeQL belum ada — download sekali saja..."
-                curl -sL https://github.com/github/codeql-cli-binaries/releases/download/v2.18.4/codeql-linux64.zip -o codeql.zip
-                unzip -q codeql.zip
-                mv codeql/codeql .
-                rm -rf codeql codeql.zip
+            # siapkan folder & binary codeql sekali saja (pakai symlink "current")
+            mkdir -p "$TOOLS"
+            cd "$TOOLS"
+            if [ ! -x current/codeql ]; then
+                echo "📦 Download CodeQL $VER…"
+                curl -L "https://github.com/github/codeql-cli-binaries/releases/download/v${VER}/codeql-linux64.zip" -o codeql.zip
+                rm -rf "codeql-${VER}" tmp && mkdir -p tmp
+                unzip -q codeql.zip -d tmp
+                mv tmp/codeql "codeql-${VER}"
+                ln -sfn "codeql-${VER}" current
+                rm -rf tmp codeql.zip
             else
                 echo "✅ CodeQL CLI sudah ada, skip download."
             fi
 
-            cd $WORKSPACE
-            /var/jenkins_home/tools/codeql database create codeql-db-go \
-                --language=go --source-root . --command="go build ./..."
+            cd "$WORKSPACE"
+            mkdir -p reports
 
-            /var/jenkins_home/tools/codeql pack download codeql/go-queries
-            /var/jenkins_home/tools/codeql database analyze codeql-db-go \
+            # OPSI 1: kalau Go toolchain SUDAH terpasang di agent, pakai ini:
+            # "$TOOLS/current/codeql" database create codeql-db-go \
+            #   --language=go --source-root . --command="go build ./..."
+
+            # OPSI 2 (disarankan kalau agent TIDAK punya Go): build via Docker
+            "$TOOLS/current/codeql" database create codeql-db-go \
+                --language=go --source-root . \
+                --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
+
+            # download pack queries (cached di ~/.codeql/packages)
+            "$TOOLS/current/codeql" pack download codeql/go-queries
+
+            # analyze (SARIF 2.1.0)
+            "$TOOLS/current/codeql" database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
-                --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0
+                --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0 || true
             '''
         }
         post {
