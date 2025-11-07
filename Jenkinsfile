@@ -72,81 +72,81 @@ pipeline {
         }
     }
 
-    // stage('SAST - CodeQL (Security Extended)') {
-    //     environment {
-    //         TOOLS  = '/var/jenkins_home/tools/codeql'
-    //         VER    = '2.18.4'
-    //         BUNDLE = "${env.TOOLS}/current"            // folder CodeQL bundle
-    //         PACKS  = "${env.HOME}/.codeql/packages"    // cache packs yg diunduh
-    //     }
-    //     steps {
-    //         withCredentials([string(credentialsId: 'github-secret', variable: 'GITHUB_TOKEN')]) {
-    //         sh '''
-    //             set -e
+    stage('SAST - CodeQL (Security Extended)') {
+        environment {
+            TOOLS  = '/var/jenkins_home/tools/codeql'
+            VER    = '2.18.4'
+            BUNDLE = "${env.TOOLS}/current"               // CodeQL bundle directory
+            PACKS  = "${env.HOME}/.codeql/packages"       // Cache untuk packs yg diunduh
+        }
+        steps {
+            withCredentials([string(credentialsId: 'github-secret', variable: 'GITHUB_TOKEN')]) {
+            sh '''
+                set -e
 
-    //             # ========== 1) Pastikan CodeQL bundle ada ==========
-    //             mkdir -p "$TOOLS" "$PACKS"
-    //             if [ ! -x "$BUNDLE/codeql" ]; then
-    //             echo "📦 Download CodeQL BUNDLE ${VER}…"
-    //             curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
-    //             rm -rf "$TOOLS/codeql-${VER}" tmp && mkdir -p tmp
-    //             tar -xzf codeql-bundle.tgz -C tmp
-    //             mv tmp/codeql "$TOOLS/codeql-${VER}"
-    //             ln -sfn "$TOOLS/codeql-${VER}" "$BUNDLE"
-    //             rm -rf tmp codeql-bundle.tgz
-    //             else
-    //             echo "✅ CodeQL bundle sudah ada."
-    //             fi
+                # 1) Pastikan CodeQL bundle ada
+                mkdir -p "$TOOLS" "$PACKS"
+                if [ ! -x "$BUNDLE/codeql" ]; then
+                echo "📦 Download CodeQL BUNDLE ${VER}…"
+                curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
+                rm -rf "$TOOLS/codeql-${VER}" tmp && mkdir -p tmp
+                tar -xzf codeql-bundle.tgz -C tmp
+                mv tmp/codeql "$TOOLS/codeql-${VER}"
+                ln -sfn "$TOOLS/codeql-${VER}" "$BUNDLE"
+                rm -rf tmp codeql-bundle.tgz
+                else
+                echo "✅ CodeQL bundle sudah ada."
+                fi
 
-    //             # Search path: biarkan resolver cari di ROOT bundle & cache packs
-    //             SEARCH="$BUNDLE:$PACKS"
+                # Pakai root bundle + cache packs sebagai search-path
+                SEARCH="$BUNDLE:$PACKS"
 
-    //             # ========== 2) Paksa download extractor/query Go (dengan auth GHCR) ==========
-    //             echo "🧹 Bersihkan cache pack Go lama (jika ada)…"
-    //             rm -rf "$PACKS"/codeql/go* || true
+                # 2) Paksa unduh packs bahasa & query untuk Go
+                echo "🧹 Bersihkan cache pack Go lama…"
+                rm -rf "$PACKS"/codeql/go* || true
 
-    //             echo "🔐 Set credentials untuk registry GHCR…"
-    //             export CODEQL_REGISTRY_AUTH='{"https://ghcr.io":{"token":"'"$GITHUB_TOKEN"'"}}'
+                echo "🔐 Export registry auth untuk GHCR"
+                export CODEQL_REGISTRY_AUTH='{"https://ghcr.io":{"token":"'"$GITHUB_TOKEN"'"}}'
 
-    //             echo "⬇️  Download pack bahasa Go (extractor) …"
-    //             "$BUNDLE/codeql" pack download codeql/go --search-path="$SEARCH" --verbosity=progress+++
+                echo "⬇️  Download pack bahasa (extractor) Go: codeql/go-all"
+                "$BUNDLE/codeql" pack download codeql/go-all --search-path="$SEARCH" --verbosity=progress+++
 
-    //             echo "⬇️  Download pack queries Go …"
-    //             "$BUNDLE/codeql" pack download codeql/go-queries --search-path="$SEARCH" --verbosity=progress+++
+                echo "⬇️  Download pack queries Go: codeql/go-queries"
+                "$BUNDLE/codeql" pack download codeql/go-queries --search-path="$SEARCH" --verbosity=progress+++
 
-    //             echo "🔎 Packs terbaca:"
-    //             "$BUNDLE/codeql" resolve qlpacks --search-path="$SEARCH" | grep -E '^codeql/go($|-queries )' || true
+                echo "🔎 Packs terbaca (filter go*):"
+                "$BUNDLE/codeql" resolve qlpacks --search-path="$SEARCH" | grep -E '^codeql/go(-all|-queries) ' || true
 
-    //             echo "🔎 Languages terbaca (harus ada 'go'):"
-    //             "$BUNDLE/codeql" resolve languages --search-path="$SEARCH"
+                echo "🔎 Languages terbaca (harus ada 'go'):"
+                "$BUNDLE/codeql" resolve languages --search-path="$SEARCH"
 
-    //             # ========== 3) Build CodeQL DB (pakai Docker Go) ==========
-    //             cd "$WORKSPACE"
-    //             mkdir -p reports
+                # 3) Build CodeQL DB (pakai container golang agar build reproducible)
+                cd "$WORKSPACE"
+                mkdir -p reports
 
-    //             "$BUNDLE/codeql" database create codeql-db-go \
-    //             --overwrite \
-    //             --language=go \
-    //             --source-root . \
-    //             --search-path="$SEARCH" \
-    //             --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
+                "$BUNDLE/codeql" database create codeql-db-go \
+                --overwrite \
+                --language=go \
+                --source-root . \
+                --search-path="$SEARCH" \
+                --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
 
-    //             # ========== 4) Analyze & hasil ke SARIF 2.1.0 ==========
-    //             "$BUNDLE/codeql" database analyze codeql-db-go \
-    //             codeql/go-queries:codeql-suites/go-security-extended.qls \
-    //             --search-path="$SEARCH" \
-    //             --format=sarifv2.1.0 \
-    //             --output reports/codeql.sarif \
-    //             --threads=0 || true
-    //         '''
-    //         }
-    //     }
-    //     post {
-    //         always {
-    //         archiveArtifacts artifacts: 'reports/codeql.sarif', allowEmptyArchive: true
-    //         }
-    //     }
-    // }
+                # 4) Analyze → SARIF 2.1.0
+                "$BUNDLE/codeql" database analyze codeql-db-go \
+                codeql/go-queries:codeql-suites/go-security-extended.qls \
+                --search-path="$SEARCH" \
+                --format=sarifv2.1.0 \
+                --output reports/codeql.sarif \
+                --threads=0 || true
+            '''
+            }
+        }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/codeql.sarif', allowEmptyArchive: true
+            }
+        }
+    }
 
     stage('SCA - Trivy (Repo deps)') {
       steps {
@@ -171,14 +171,24 @@ pipeline {
 
     stage('SCA - Trivy (Image)') {
       steps {
-        sh """
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:latest image --severity CRITICAL,HIGH \
-            --vuln-type os,library --ignore-unfixed \
-            --format sarif --output trivy-image.sarif ${IMAGE_TAG}
-        """
-      }
+            sh '''
+            set -e
+            mkdir -p reports
+            docker run --rm \
+                -v "$PWD":/work -w /work \
+                -v /var/run/docker.sock:/var/run/docker.sock \
+                aquasec/trivy:latest image "$IMAGE_TAG" \
+                --severity CRITICAL,HIGH \
+                --pkg-types os,library \
+                --ignore-unfixed \
+                --scanners vuln \
+                --format sarif \
+                --exit-code 0 \
+                --output /work/reports/trivy-image.sarif
+            echo "Isi folder reports:"
+            ls -lah reports || true
+            '''
+     }
       post {
         always {
           archiveArtifacts artifacts: 'trivy-image.sarif', onlyIfSuccessful: false
