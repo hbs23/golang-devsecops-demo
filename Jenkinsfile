@@ -195,7 +195,7 @@ pipeline {
      }
       post {
         always {
-          archiveArtifacts artifacts: 'trivy-image.sarif', onlyIfSuccessful: false
+          archiveArtifacts artifacts: 'reports/trivy-image.sarif', onlyIfSuccessful: false
         }
       }
     }
