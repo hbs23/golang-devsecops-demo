@@ -1,7 +1,0 @@
-name: org/go-config
-paths-ignore:
-  - vendor/**
-  - "**/*_mock.go"
-  - "**/mocks/**"
-  - "**/generated/**"
-  - "**/*_test.go"
