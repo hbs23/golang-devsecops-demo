@@ -1,0 +1,94 @@
+[2025-11-07 21:55:56] This is codeql execute queries -J-Xmx1383M --verbosity=progress --logdir=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/log --evaluator-log-level=5 --warnings=show --qlconfig-file=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/qlconfig.yml --dynamic-join-order-mode=none --no-rerun --interpret-passthrough=null,--format=sarifv2,-o=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-sqli.sarif,--max-paths=4,--csv-location-format=line-column,--print-diagnostics-summary,--print-metrics-summary,--qlconfig-file=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/qlconfig.yml,--,/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go,codeql-db-go/queries --output=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/results -- /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/db-go codeql-db-go/queries
+[2025-11-07 21:55:56] Calling plumbing command: codeql resolve queries --qlconfig-file=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/qlconfig.yml --format=json -- codeql-db-go/queries
+[2025-11-07 21:55:56] [SPAMMY] resolve queries> Scanning for QL files at /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries.
+[2025-11-07 21:55:56] [PROGRESS] resolve queries> Recording pack reference (anonymous QL pack at /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/anything) at /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries.
+[2025-11-07 21:55:56] [SPAMMY] resolve queries> Found 1 QL files in /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries.
+[2025-11-07 21:55:56] Plumbing command codeql resolve queries completed:
+                      [
+                        "/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql"
+                      ]
+[2025-11-07 21:55:56] Creating executor with 1 threads.
+[2025-11-07 21:55:56] Calling plumbing command: codeql resolve extensions --qlconfig-file=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/qlconfig.yml --include-extension-row-locations codeql-db-go/queries
+[2025-11-07 21:55:56] Calling plumbing command: codeql resolve queries --qlconfig-file=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/qlconfig.yml --allow-library-packs --format startingpacks -- codeql-db-go/queries
+[2025-11-07 21:55:56] [SPAMMY] resolve queries> Scanning for QL files at /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries.
+[2025-11-07 21:55:56] [PROGRESS] resolve queries> Recording pack reference (anonymous QL pack at /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/anything) at /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries.
+[2025-11-07 21:55:56] [SPAMMY] resolve queries> Found 1 QL files in /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries.
+[2025-11-07 21:55:56] Plumbing command codeql resolve queries completed:
+                      [
+                        "/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries"
+                      ]
+[2025-11-07 21:55:56] Calling plumbing command: codeql resolve extensions-by-pack --qlconfig-file=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/qlconfig.yml --include-extension-row-locations -- /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries
+[2025-11-07 21:55:56] [SPAMMY] resolve extensions-by-pack> [INCOMPATIBILITY] <anonymous pack>: not 0.0.0 {root: <anonymous pack>@0.0.0}
+[2025-11-07 21:55:56] [SPAMMY] resolve extensions-by-pack> [DERIVATION] <anonymous pack>: 0.0.0 {<anonymous pack>: not 0.0.0 {root: <anonymous pack>@0.0.0}}
+[2025-11-07 21:55:56] [SPAMMY] resolve extensions-by-pack> [DECISION 1] <anonymous pack>: 0.0.0
+[2025-11-07 21:55:56] Plumbing command codeql resolve extensions-by-pack completed:
+                      {
+                        "models" : [ ],
+                        "data" : { },
+                        "threatModels" : { },
+                        "extensionPacks" : [ ]
+                      }
+[2025-11-07 21:55:56] Plumbing command codeql resolve extensions completed:
+                      {
+                        "models" : [ ],
+                        "data" : { },
+                        "threatModels" : { },
+                        "extensionPacks" : [ ]
+                      }
+[2025-11-07 21:55:56] Calling plumbing command: codeql resolve library-path --qlconfig-file=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/qlconfig.yml --query=/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql --format=json
+[2025-11-07 21:55:56] [DETAILS] resolve library-path> Resolving query at normalized path /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql.
+[2025-11-07 21:55:56] [DETAILS] resolve library-path> Found no pack; trying after symlink resolution with /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql.
+[2025-11-07 21:55:56] [DETAILS] resolve library-path> Found enclosing pack 'queries' at /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries.
+[2025-11-07 21:55:56] [DETAILS] resolve library-path> Adding compilation cache at /Users/hasanbasri/.codeql/compile-cache.
+[2025-11-07 21:55:56] [DETAILS] resolve library-path> Resolving library dependencies from /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql.
+[2025-11-07 21:55:56] [SPAMMY] resolve library-path> [INCOMPATIBILITY] <anonymous pack>: not 0.0.0 {root: <anonymous pack>@0.0.0}
+[2025-11-07 21:55:56] [SPAMMY] resolve library-path> [DERIVATION] <anonymous pack>: 0.0.0 {<anonymous pack>: not 0.0.0 {root: <anonymous pack>@0.0.0}}
+[2025-11-07 21:55:56] [SPAMMY] resolve library-path> [DECISION 1] <anonymous pack>: 0.0.0
+[2025-11-07 21:55:56] [DETAILS] resolve library-path> QL pack dependencies for /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries resolved OK.
+[2025-11-07 21:55:56] [DETAILS] resolve library-path> Found no dbscheme through dependencies.
+[2025-11-07 21:55:56] Plumbing command codeql resolve library-path completed:
+                      {
+                        "libraryPath" : [
+                          "/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries"
+                        ],
+                        "compilationCache" : [
+                          "/Users/hasanbasri/.codeql/compile-cache"
+                        ],
+                        "relativeName" : "queries/SQLi_Taint.ql",
+                        "possibleAdvice" : "There should probably be a qlpack.yml file declaring dependencies in /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries or an enclosing directory.",
+                        "qlPackName" : "queries"
+                      }
+[2025-11-07 21:55:56] [PROGRESS] execute queries> Compiling query plan for /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql.
+[2025-11-07 21:55:56] [DETAILS] execute queries> Resolving imports for /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql.
+[2025-11-07 21:55:56] Resolved file set for /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql hashes to bba2358205b5a93eca7c84a8715fe1da.
+[2025-11-07 21:55:56] [DETAILS] execute queries> Checking QL for /Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql.
+[2025-11-07 21:55:56] Stale frontend caches are invalidated based on import graph reachability.
+[2025-11-07 21:55:56] [WARN] Stats for unknown field "named" in relation "underlying_type"
+[2025-11-07 21:55:56] [WARN] Stats for unknown field "named" in relation "underlying_type"
+[2025-11-07 21:55:56] [WARN] Stats for unknown field "named" in relation "underlying_type"
+[2025-11-07 21:55:56] [WARN] Stats for unknown table "alias_rhs"
+[2025-11-07 21:55:56] ExternalModuleBindingPass ...
+[2025-11-07 21:55:57] ExternalModuleBindingPass time: 00:00.000
+[2025-11-07 21:55:57] CollectInstantiationsPass ...
+[2025-11-07 21:55:57] CollectInstantiationsPass time: 00:00.002
+[2025-11-07 21:55:57] Ql checks ...
+[2025-11-07 21:55:57] Ql checks time: 00:00.026
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve module go (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:8,8-10)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve module semmle.go.security.dataflow.TaintTracking (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:9,8-49)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve module DataFlow (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:10,8-16)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve type CallExpr (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:12,27-35)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: getCallee() cannot be resolved for type DBQueryCall.extends (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:14,10-19)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: getCallee() cannot be resolved for type DBQueryCall.extends (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:15,10-19)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve module TaintTracking (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:19,26-39)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve module DataFlow (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:22,31-39)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve type CallExpr (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:23,12-20)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve module DataFlow (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:33,29-37)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve module DataFlow (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:38,6-14)
+[2025-11-07 21:55:57] [ERROR] execute queries> ERROR: could not resolve module DataFlow (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:38,30-38)
+[2025-11-07 21:55:57] [WARN] execute queries> WARNING: unused method 'isSource' (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:22,22-30)
+[2025-11-07 21:55:57] [WARN] execute queries> WARNING: unused method 'isSink' (/Users/hasanbasri/Documents/Pribadi/Binus-Center-Project/2025/HanaBank/praktikum/codeql-db-go/queries/SQLi_Taint.ql:33,22-28)
+[2025-11-07 21:55:57] Sequence stamp origin is -5983888638889426407
+[2025-11-07 21:55:57] Pausing evaluation to close the cache at sequence stamp o+0
+[2025-11-07 21:55:57] The disk cache is freshly trimmed; leave it be.
+[2025-11-07 21:55:57] Unpausing evaluation
+[2025-11-07 21:55:57] Exiting with code 2

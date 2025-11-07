@@ -1,0 +1,2935 @@
+---
+queries:
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: InconsistentCode/ConstantLengthComparison.ql
+  relativeBqrsPath: codeql/go-queries/InconsistentCode/ConstantLengthComparison.bqrs
+  metadata:
+    name: Constant length comparison
+    description: |-
+      Comparing the length of an array to a constant before indexing it using a
+                    loop variable may indicate a logic error.
+    kind: problem
+    problem.severity: warning
+    id: go/constant-length-comparison
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-129
+    precision: high
+  queryHelp: "# Constant length comparison\nIndexing operations on arrays, slices,\
+    \ or strings should use an index at most one less than the length. If the operation\
+    \ uses a variable index but checks the length against a constant, this may indicate\
+    \ a logic error which could lead to an out-of-bounds access.\n\n\n## Recommendation\n\
+    Inspect the code closely to determine whether the length should be compared to\
+    \ the index variable instead. For loops that iterate over every element, using\
+    \ a `range` loop is better than explicit index manipulation.\n\n\n## Example\n\
+    The following example shows a method which checks whether slice `xs` is a prefix\
+    \ of slice `ys`:\n\n\n```go\npackage main\n\nfunc isPrefixOf(xs, ys []int) bool\
+    \ {\n\tfor i := 0; i < len(xs); i++ {\n\t\tif len(ys) == 0 || xs[i] != ys[i] {\n\
+    \t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n\n```\nA loop using an index\
+    \ variable `i` is used to iterate over the elements of `xs` and compare them to\
+    \ the corresponding elements of `ys`. However, the check to ensure that `i` is\
+    \ a valid index into `ys` is incorrectly specified as `len(ys) == 0`. Instead,\
+    \ the check should ensure that `len(ys)` is greater than `i`:\n\n\n```go\npackage\
+    \ main\n\nfunc isPrefixOfGood(xs, ys []int) bool {\n\tfor i := 0; i < len(xs);\
+    \ i++ {\n\t\tif len(ys) <= i || xs[i] != ys[i] {\n\t\t\treturn false\n\t\t}\n\t\
+    }\n\treturn true\n}\n\n```\n\n## References\n* The Go Programming Language Specification:\
+    \ [For statements](https://golang.org/ref/spec#For_statements).\n* The Go Programming\
+    \ Language Specification: [Index expressions](https://golang.org/ref/spec#Index_expressions).\n\
+    * Common Weakness Enumeration: [CWE-129](https://cwe.mitre.org/data/definitions/129.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: InconsistentCode/InconsistentLoopOrientation.ql
+  relativeBqrsPath: codeql/go-queries/InconsistentCode/InconsistentLoopOrientation.bqrs
+  metadata:
+    name: Inconsistent direction of for loop
+    description: |-
+      A 'for' loop that increments its loop variable but checks it
+                    against a lower bound, or decrements its loop variable but
+                    checks it against an upper bound, will either stop iterating
+                    immediately or keep iterating indefinitely, and is usually
+                    indicative of a typo.
+    kind: problem
+    problem.severity: error
+    id: go/inconsistent-loop-direction
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-835
+    precision: very-high
+  queryHelp: "# Inconsistent direction of for loop\nMost `for` loops either increment\
+    \ a variable until an upper bound is reached, or decrement a variable until a\
+    \ lower bound is reached. If, instead, the variable is incremented but checked\
+    \ against a lower bound, or decremented but checked against an upper bound, then\
+    \ the loop will usually either terminate immediately and never execute its body,\
+    \ or it will keep iterating indefinitely. Neither is likely to be intentional,\
+    \ and is most likely the result of a typo.\n\nThe only exception to this are loops\
+    \ whose loop variable is an unsigned integer. In this case, initializing the variable\
+    \ with an upper bound and then decrementing it while checking against the same\
+    \ upper bound is unproblematic: the variable is counted down from the upper bound\
+    \ to zero, and then wraps around to a large positive value, causing the loop to\
+    \ terminate. This is usually intentional, and hence is not flagged by the query.\n\
+    \n\n## Recommendation\nExamine the loop carefully to check whether its test expression\
+    \ or update statement are erroneous.\n\n\n## Example\nIn the following example,\
+    \ two loops are used to set all elements of a slice `a` outside a range `lower`..`upper`\
+    \ to zero. However, the second loop contains a typo: the loop variable `i` is\
+    \ decremented instead of incremented, so `i` is counted downwards from `upper+1`\
+    \ to `0`, `-1`, `-2` and so on.\n\n\n```go\npackage main\n\nfunc zeroOutExcept(a\
+    \ []int, lower int, upper int) {\n\t// zero out everything below index `lower`\n\
+    \tfor i := lower - 1; i >= 0; i-- {\n\t\ta[i] = 0\n\t}\n\n\t// zero out everything\
+    \ above index `upper`\n\tfor i := upper + 1; i < len(a); i-- {\n\t\ta[i] = 0\n\
+    \t}\n}\n\n```\nTo correct this issue, change the second loop to increment its\
+    \ loop variable instead:\n\n\n```go\npackage main\n\nfunc zeroOutExcept(a []int,\
+    \ lower int, upper int) {\n\t// zero out everything below index `lower`\n\tfor\
+    \ i := lower - 1; i >= 0; i-- {\n\t\ta[i] = 0\n\t}\n\n\t// zero out everything\
+    \ above index `upper`\n\tfor i := upper + 1; i < len(a); i++ {\n\t\ta[i] = 0\n\
+    \t}\n}\n\n```\n\n## References\n* The Go Programming Language Specification: [For\
+    \ statements](https://golang.org/ref/spec#For_statements).\n* Common Weakness\
+    \ Enumeration: [CWE-835](https://cwe.mitre.org/data/definitions/835.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: InconsistentCode/LengthComparisonOffByOne.ql
+  relativeBqrsPath: codeql/go-queries/InconsistentCode/LengthComparisonOffByOne.bqrs
+  metadata:
+    name: Off-by-one comparison against length
+    description: |-
+      An array index is compared with the length of the array,
+                    and then used in an indexing operation that could be out of bounds.
+    kind: problem
+    problem.severity: error
+    id: go/index-out-of-bounds
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-193
+    precision: high
+  queryHelp: "# Off-by-one comparison against length\nIndexing operations on arrays,\
+    \ slices or strings should use an index at most one less than the length. If the\
+    \ index to be accessed is checked for being less than or equal to the length (`<=`),\
+    \ instead of less than the length (`<`), the index could be out of bounds.\n\n\
+    \n## Recommendation\nUse less than (`<`) rather than less than or equals (`<=`)\
+    \ when comparing a potential index against a length. For loops that iterate over\
+    \ every element, a better solution is to use a `range` loop instead of looping\
+    \ over explicit indexes.\n\n\n## Example\nThe following example shows a method\
+    \ which checks whether a value appears in a comma-separated list of values:\n\n\
+    \n```go\npackage main\n\nimport \"strings\"\n\nfunc containsBad(searchName string,\
+    \ names string) bool {\n\tvalues := strings.Split(names, \",\")\n\t// BAD: index\
+    \ could be equal to length\n\tfor i := 0; i <= len(values); i++ {\n\t\t// When\
+    \ i = length, this access will be out of bounds\n\t\tif values[i] == searchName\
+    \ {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}\n\n```\nA loop using an\
+    \ index variable `i` is used to iterate over the elements in the comma-separated\
+    \ list. However, the terminating condition of the loop is incorrectly specified\
+    \ as `i <= len(values)`. This condition holds when `i` is equal to `len(values)`,\
+    \ but the access `values[i]` in the body of the loop will be out of bounds in\
+    \ this case.\n\nOne potential solution would be to replace `i <= len(values)`\
+    \ with `i < len(values)`. A better solution is to use a `range` loop instead,\
+    \ which avoids the need for explicitly manipulating the index variable:\n\n\n\
+    ```go\npackage main\n\nimport \"strings\"\n\nfunc containsGood(searchName string,\
+    \ names string) bool {\n\tvalues := strings.Split(names, \",\")\n\t// GOOD: Avoid\
+    \ using indexes, use range loop instead\n\tfor _, name := range values {\n\t\t\
+    if name == searchName {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn true\n}\n\n```\n\
+    \n## References\n* The Go Programming Language Specification: [For statements](https://golang.org/ref/spec#For_statements).\n\
+    * The Go Programming Language Specification: [Index expressions](https://golang.org/ref/spec#Index_expressions).\n\
+    * Common Weakness Enumeration: [CWE-193](https://cwe.mitre.org/data/definitions/193.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: InconsistentCode/MissingErrorCheck.ql
+  relativeBqrsPath: codeql/go-queries/InconsistentCode/MissingErrorCheck.bqrs
+  metadata:
+    name: Missing error check
+    description: |-
+      When a function returns a pointer alongside an error value, one should normally
+                    assume that the pointer may be nil until either the pointer or error has been checked.
+    kind: problem
+    problem.severity: warning
+    id: go/missing-error-check
+    tags: |-
+      quality
+             reliability
+             error-handling
+             external/cwe/cwe-252
+    precision: high
+  queryHelp: "# Missing error check\nWhen a function call returns two values, a pointer\
+    \ and a (subtype of) error, it is conventional to assume that the pointer might\
+    \ be nil until either the pointer or error value has been checked.\n\nIf the pointer\
+    \ is dereferenced without a check, an unexpected nil pointer dereference panic\
+    \ may occur.\n\n\n## Recommendation\nEnsure that the returned pointer is either\
+    \ directly checked against nil, or the error value is checked before using the\
+    \ returned pointer.\n\n\n## Example\nIn the example below, `user` dereferences\
+    \ `ptr` without checking either `ptr` or `err`. This might lead to a panic.\n\n\
+    \n```go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc user(input string)\
+    \ {\n\n\tptr, err := os.Open(input)\n\t// BAD: ptr is dereferenced before either\
+    \ it or `err` has been checked.\n\tfmt.Printf(\"Opened %v\\n\", *ptr)\n\tif err\
+    \ != nil {\n\t\tfmt.Printf(\"Bad input: %s\\n\", input)\n\t}\n\n}\n\n```\nThe\
+    \ corrected version of `user` checks `err` before using `ptr`.\n\n\n```go\npackage\
+    \ main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc user(input string) {\n\n\t\
+    ptr, err := os.Open(input)\n\tif err != nil {\n\t\tfmt.Printf(\"Bad input: %s\\\
+    n\", input)\n\t\treturn\n\t}\n\t// GOOD: `err` has been checked before `ptr` is\
+    \ used\n\tfmt.Printf(\"Result was %v\\n\", *ptr)\n\n}\n\n```\n\n## References\n\
+    * The Go Blog: [Error handling and Go](https://blog.golang.org/error-handling-and-go).\n\
+    * Common Weakness Enumeration: [CWE-252](https://cwe.mitre.org/data/definitions/252.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: InconsistentCode/MistypedExponentiation.ql
+  relativeBqrsPath: codeql/go-queries/InconsistentCode/MistypedExponentiation.bqrs
+  metadata:
+    name: Bitwise exclusive-or used like exponentiation
+    description: "Using ^ as exponentiation is a mistake, as it is the bitwise exclusive-or\
+      \ operator."
+    kind: problem
+    problem.severity: warning
+    id: go/mistyped-exponentiation
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-480
+    precision: high
+  queryHelp: "# Bitwise exclusive-or used like exponentiation\nThe caret symbol (`^`)\
+    \ is sometimes used to represent exponentiation but in Go, as in many C-like languages,\
+    \ it represents the bitwise exclusive-or operation. The expression as `2^32` thus\
+    \ evaluates the number 34, not 2<sup>32</sup>, and it is likely that patterns\
+    \ such as this are mistakes.\n\n\n## Recommendation\nTo compute 2<sup><code>EXP</code></sup>,\
+    \ `1 << EXP` can be used. For constant exponents, `1eEXP` can be used to find\
+    \ 10<sup><code>EXP</code></sup>. In other cases, there is `math.Pow` in the Go\
+    \ standard library which provides this functionality.\n\n\n## Example\nThe example\
+    \ below prints 34 and not 2<sup>32</sup> (4294967296).\n\n\n```go\npackage main\n\
+    \nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(2 ^ 32) // should be 1 << 32\n\
+    }\n\n```\n\n## References\n* GCC Bugzilla: [GCC should warn about 2^16 and 2^32\
+    \ and 2^64](https://gcc.gnu.org/bugzilla/show_bug.cgi?id=90885)\n* Common Weakness\
+    \ Enumeration: [CWE-480](https://cwe.mitre.org/data/definitions/480.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: InconsistentCode/UnhandledCloseWritableHandle.ql
+  relativeBqrsPath: codeql/go-queries/InconsistentCode/UnhandledCloseWritableHandle.bqrs
+  metadata:
+    name: Writable file handle closed without error handling
+    description: |-
+      Errors which occur when closing a writable file handle may result in data loss
+                    if the data could not be successfully flushed. Such errors should be handled
+                    explicitly.
+    kind: path-problem
+    problem.severity: warning
+    precision: high
+    id: go/unhandled-writable-file-close
+    tags: |-
+      quality
+             reliability
+             error-handling
+             external/cwe/cwe-252
+  queryHelp: "# Writable file handle closed without error handling\nData written to\
+    \ a file handle may not immediately be flushed to the underlying storage medium\
+    \ by the operating system. Often, the data may be cached in memory until the handle\
+    \ is closed, or until a later point after that. Only calling `os.File.Sync` gives\
+    \ a reasonable guarantee that the data is flushed. Therefore, write errors may\
+    \ not occur until `os.File.Close` or `os.File.Sync` are called. If either is called\
+    \ and any errors returned by them are discarded, then the program may be unaware\
+    \ that data loss occurred.\n\n\n## Recommendation\nAlways check whether `os.File.Close`\
+    \ returned an error and handle it appropriately.\n\n\n## Example\nIn this first\
+    \ example, two calls to `os.File.Close` are made with the intention of closing\
+    \ the file after all work on it has been done or if writing to it fails. However,\
+    \ while errors that may arise during the call to `os.File.WriteString` are handled,\
+    \ any errors arising from the calls to `os.File.Close` are discarded silently:\n\
+    \n\n```go\npackage main\n\nimport (\n\t\"os\"\n)\n\nfunc example() error {\n\t\
+    f, err := os.OpenFile(\"file.txt\", os.O_WRONLY|os.O_CREATE, 0666)\n\n\tif err\
+    \ != nil {\n\t\treturn err\n\t}\n\n\tif _, err := f.WriteString(\"Hello\"); err\
+    \ != nil {\n\t\tf.Close()\n\t\treturn err\n\t}\n\n\tf.Close()\n\n\treturn nil\n\
+    }\n\n```\nIn the second example, a call to `os.File.Close` is deferred in order\
+    \ to accomplish the same behaviour as in the first example. However, while errors\
+    \ that may arise during the call to `os.File.WriteString` are handled, any errors\
+    \ arising from `os.File.Close` are again discarded silently:\n\n\n```go\npackage\
+    \ main\n\nimport (\n\t\"os\"\n)\n\nfunc example() error {\n\tf, err := os.OpenFile(\"\
+    file.txt\", os.O_WRONLY|os.O_CREATE, 0666)\n\n\tif err != nil {\n\t\treturn err\n\
+    \t}\n\n\tdefer f.Close()\n\n\tif _, err := f.WriteString(\"Hello\"); err != nil\
+    \ {\n\t\treturn err\n\t}\n\n\treturn nil\n}\n\n```\nTo correct this issue, handle\
+    \ errors arising from calls to `os.File.Close` explicitly:\n\n\n```go\npackage\
+    \ main\n\nimport (\n\t\"os\"\n)\n\nfunc example() (exampleError error) {\n\tf,\
+    \ err := os.OpenFile(\"file.txt\", os.O_WRONLY|os.O_CREATE, 0666)\n\n\tif err\
+    \ != nil {\n\t\treturn err\n\t}\n\n\tdefer func() {\n\t\t// try to close the file;\
+    \ if an error occurs, set the error returned by `example`\n\t\t// to that error,\
+    \ but only if `WriteString` didn't already set it to something first\n\t\tif err\
+    \ := f.Close(); exampleError == nil && err != nil {\n\t\t\texampleError = err\n\
+    \t\t}\n\t}()\n\n\tif _, err := f.WriteString(\"Hello\"); err != nil {\n\t\texampleError\
+    \ = err\n\t}\n\n\treturn\n}\n\n```\n\n## References\n* The Go Programming Language\
+    \ Specification: [Defer statements](https://go.dev/ref/spec#Defer_statements).\n\
+    * The Go Programming Language Specification: [Errors](https://go.dev/ref/spec#Errors).\n\
+    * Common Weakness Enumeration: [CWE-252](https://cwe.mitre.org/data/definitions/252.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: InconsistentCode/WhitespaceContradictsPrecedence.ql
+  relativeBqrsPath: codeql/go-queries/InconsistentCode/WhitespaceContradictsPrecedence.bqrs
+  metadata:
+    name: Whitespace contradicts operator precedence
+    description: |-
+      Nested expressions where the formatting contradicts the grouping enforced by operator precedence
+                    are difficult to read and may indicate a bug.
+    kind: problem
+    problem.severity: warning
+    id: go/whitespace-contradicts-precedence
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-783
+    precision: very-high
+  queryHelp: "# Whitespace contradicts operator precedence\nNested expressions where\
+    \ the spacing around operators suggests a different grouping than that imposed\
+    \ by the Go operator precedence rules are problematic: they could indicate a bug\
+    \ where the author of the code misunderstood the precedence rules. Even if there\
+    \ is no a bug, the spacing could be confusing to people who read the code.\n\n\
+    \n## Recommendation\nMake sure that the spacing around operators reflects operator\
+    \ precedence, or use parentheses to clarify grouping.\n\n\n## Example\nConsider\
+    \ the following function intended for checking whether the bit at position \\\
+    `pos\\` of the variable \\`x\\` is set:\n\n\n```go\npackage main\n\nfunc isBitSetBad(x\
+    \ int, pos uint) bool {\n\treturn x&1<<pos != 0\n}\n\n```\nHere, the spacing around\
+    \ `&` and `<<` suggests the grouping `x & (1<<pos)`. However, in Go `&` and `<<`\
+    \ have the same precedence and hence are evaluated left to right, so the expression\
+    \ is actually equivalent to `(x & 1) << pos`.\n\nTo fix this issue and give the\
+    \ expression its intended semantics, parentheses should be used like this:\n\n\
+    \n```go\npackage main\n\nfunc isBitSetGood(x int, pos uint) bool {\n\treturn x&(1<<pos)\
+    \ != 0\n}\n\n```\n\n## References\n* The Go Programming Language Specification:\
+    \ [Operator precedence](https://golang.org/ref/spec#Operator_precedence).\n* Common\
+    \ Weakness Enumeration: [CWE-783](https://cwe.mitre.org/data/definitions/783.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: InconsistentCode/WrappedErrorAlwaysNil.ql
+  relativeBqrsPath: codeql/go-queries/InconsistentCode/WrappedErrorAlwaysNil.bqrs
+  metadata:
+    name: Wrapped error is always nil
+    description: Finds calls to `Wrap` from `pkg/errors` where the error argument
+      is always nil.
+    kind: problem
+    problem.severity: warning
+    id: go/unexpected-nil-value
+    tags: |-
+      quality
+             reliability
+             error-handling
+    precision: high
+  queryHelp: "# Wrapped error is always nil\nThe `pkg.errors` package provides the\
+    \ `errors.Wrap` function for annotating an error with a stack trace. When passed\
+    \ `nil`, this function returns `nil`. When the first parameter to `errors.Wrap`\
+    \ is *always* `nil`, the function call has no effect and likely indicates a programming\
+    \ mistake. A common example of this is when an `errors.Wrap(err, \"message\")`\
+    \ call is copied from an earlier error-handling block in the same function and\
+    \ used in a subsequent error-handling block that does not check `err` in its guard.\
+    \ In this case the return of a `nil` value to the caller indicates by convention\
+    \ that the operation succeeded, and so the failure is masked.\n\n\n## Recommendation\n\
+    Usually an `err` value is being referenced outside its intended scope. The problem\
+    \ can be fixed by removing that reference, for example by changing a call of the\
+    \ form `errors.Wrap(err, \"message\")` to `errors.New(\"message\")`.\n\n\n## Example\n\
+    The example below shows an example where the `err` value returned from the call\
+    \ to `f1` is reused in a later call, when it is known to be `nil`:\n\n\n```go\n\
+    package main\n\nimport (\n\t\"github.com/pkg/errors\"\n)\n\nfunc f1(input string)\
+    \ error {\n\tif input == \"1\" {\n\t\treturn errors.Errorf(\"error in f1\")\n\t\
+    }\n\treturn nil\n}\n\nfunc f2(input string) (bool, error) {\n\tif input == \"\
+    2\" {\n\t\treturn false, errors.Errorf(\"error in f2\")\n\t}\n\treturn true, nil\n\
+    }\n\nfunc test1(input string) error {\n\terr := f1(input)\n\tif err != nil {\n\
+    \t\treturn errors.Wrap(err, \"input is the first non-negative integer\")\n\t}\n\
+    \tif ok2, _ := f2(input); !ok2 {\n\t\treturn errors.Wrap(err, \"input is the second\
+    \ non-negative integer\")\n\t}\n\treturn nil\n}\n\n```\nOne way of fixing this\
+    \ is to create a new error value with `errors.New`:\n\n\n```go\npackage main\n\
+    \nimport (\n\t\"github.com/pkg/errors\"\n)\n\nfunc f1(input string) error {\n\t\
+    if input == \"1\" {\n\t\treturn errors.Errorf(\"error in f1\")\n\t}\n\treturn\
+    \ nil\n}\n\nfunc f2(input string) (bool, error) {\n\tif input == \"2\" {\n\t\t\
+    return false, errors.Errorf(\"error in f2\")\n\t}\n\treturn true, nil\n}\n\nfunc\
+    \ test1(input string) error {\n\terr := f1(input)\n\tif err != nil {\n\t\treturn\
+    \ errors.Wrap(err, \"input is the first non-negative integer\")\n\t}\n\tif ok2,\
+    \ _ := f2(input); !ok2 {\n\t\treturn errors.New(\"input is the second non-negative\
+    \ integer\")\n\t}\n\treturn nil\n}\n\n```\n\n## References\n* Go errors, github.com/pkg/errors:\
+    \ [errors.Wrap](https://pkg.go.dev/github.com/pkg/errors#Wrap)\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/CompareIdenticalValues.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/CompareIdenticalValues.bqrs
+  metadata:
+    name: Comparison of identical values
+    description: |-
+      If the same expression occurs on both sides of a comparison
+                    operator, the operator is redundant, and probably indicates a mistake.
+    kind: problem
+    problem.severity: warning
+    id: go/comparison-of-identical-expressions
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-570
+             external/cwe/cwe-571
+    precision: very-high
+  queryHelp: "# Comparison of identical values\nComparing two identical expressions\
+    \ typically indicates a mistake such as a missing qualifier or a misspelled variable\
+    \ name.\n\n\n## Recommendation\nCarefully inspect the comparison to determine\
+    \ whether it is a symptom of a bug.\n\n\n## Example\nIn the example below, the\
+    \ method `Rectangle.contains` is intended to check whether a point `(x, y)` lies\
+    \ inside a rectangle `r` given by its origin `(r.x, r.y)`, its width `r.width`,\
+    \ and its height `r.height`.\n\n\n```go\npackage main\n\ntype Rectangle struct\
+    \ {\n\tx, y, width, height float64\n}\n\nfunc (r *Rectangle) containsBad(x, y\
+    \ float64) bool {\n\treturn r.x <= x &&\n\t\ty <= y &&\n\t\tx <= r.x+r.width &&\n\
+    \t\ty <= r.y+r.height\n}\n\n```\nNote, however, that on line 9 the programmer\
+    \ forgot to qualify `r.y`, thus ending up comparing the argument `y` against itself.\
+    \ The comparison should be fixed accordingly:\n\n\n```go\npackage main\n\nfunc\
+    \ (r *Rectangle) containsGood(x, y float64) bool {\n\treturn r.x <= x &&\n\t\t\
+    r.y <= y &&\n\t\tx <= r.x+r.width &&\n\t\ty <= r.y+r.height\n}\n\n```\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/DeadStoreOfField.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/DeadStoreOfField.bqrs
+  metadata:
+    name: Useless assignment to field
+    description: An assignment to a field that is not used later on has no effect.
+    kind: problem
+    problem.severity: warning
+    id: go/useless-assignment-to-field
+    tags: |-
+      quality
+             maintainability
+             useless-code
+             external/cwe/cwe-563
+    precision: very-high
+  queryHelp: "# Useless assignment to field\nA value is assigned to a field, but its\
+    \ value is never read. This means that the assignment has no effect, and could\
+    \ indicate a logic error or incomplete code.\n\n\n## Recommendation\nExamine the\
+    \ assignment closely to determine whether it is redundant, or whether it is perhaps\
+    \ a symptom of another bug.\n\n\n## Example\nThe following example shows a simple\
+    \ `struct` type wrapping an integer counter with a method `reset` that sets the\
+    \ counter to zero.\n\n\n```go\npackage main\n\ntype counter struct {\n\tval int\n\
+    }\n\nfunc (c counter) reset() {\n\tc.val = 0\n}\n\n```\nHowever, the receiver\
+    \ variable of `reset` is declared to be of type `counter`, not `*counter`, so\
+    \ the receiver value is passed into the method by value, not by reference. Consequently,\
+    \ the method does not actually mutate its receiver as intended.\n\nTo fix this,\
+    \ change the type of the receiver variable to `*counter`:\n\n\n```go\npackage\
+    \ main\n\nfunc (c *counter) resetGood() {\n\tc.val = 0\n}\n\n```\n\n## References\n\
+    * Go Frequently Asked Questions: [Should I define methods on values or pointers?](https://golang.org/doc/faq#methods_on_values_or_pointers)\n\
+    * The Go Programming Language Specification: [Method declarations](https://golang.org/ref/spec#Method_declarations).\n\
+    * Common Weakness Enumeration: [CWE-563](https://cwe.mitre.org/data/definitions/563.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/DeadStoreOfLocal.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/DeadStoreOfLocal.bqrs
+  metadata:
+    name: Useless assignment to local variable
+    description: |-
+      An assignment to a local variable that is not used later on, or whose value is always
+                    overwritten, has no effect.
+    kind: problem
+    problem.severity: warning
+    id: go/useless-assignment-to-local
+    tags: |-
+      quality
+             maintainability
+             useless-code
+             external/cwe/cwe-563
+    precision: very-high
+  queryHelp: "# Useless assignment to local variable\nA value is assigned to a variable,\
+    \ but either it is never read, or its value is always overwritten before being\
+    \ read. This means that the original assignment has no effect, and could indicate\
+    \ a logic error or incomplete code.\n\n\n## Recommendation\nRemove assignments\
+    \ to variables that are immediately overwritten, or use the blank identifier `_`\
+    \ as a placeholder for return values that are never used.\n\n\n## Example\nIn\
+    \ the following example, a value is assigned to `a`, but then immediately overwritten,\
+    \ a value is assigned to `b` and never used, and finally, the results of a call\
+    \ to `fmt.Println` are assigned to two temporary variables, which are then immediately\
+    \ overwritten by a call to `function`.\n\n\n```go\npackage main\n\nimport \"fmt\"\
+    \n\nfunc main() {\n\ta := calculateValue()\n\ta = 2\n\n\tb := calculateValue()\n\
+    \n\tignore, ignore1 := fmt.Println(a)\n\n\tignore, ignore1, err := function()\n\
+    \tif err != nil {\n\t\tpanic(err)\n\t}\n\n\tfmt.Println(a)\n}\n\n```\nThe result\
+    \ of `calculateValue` is never used, and if `calculateValue` is a side-effect\
+    \ free function, those assignments can be removed. To ignore all the return values\
+    \ of `fmt.Println`, you can simply not assign it to any variables. To ignore only\
+    \ certain return values, use `_`.\n\n\n```go\npackage main\n\nimport \"fmt\"\n\
+    \nfunc main() {\n\ta := 2\n\n\tfmt.Println(a)\n\n\t_, _, err := function()\n\t\
+    if err != nil {\n\t\tpanic(err)\n\t}\n\n\tfmt.Println(a)\n}\n\n```\n\n## References\n\
+    * Wikipedia: [Dead store](http://en.wikipedia.org/wiki/Dead_store).\n* The Go\
+    \ Programming Language Specification: [Blank identifier](https://golang.org/ref/spec#Blank_identifier).\n\
+    * Common Weakness Enumeration: [CWE-563](https://cwe.mitre.org/data/definitions/563.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/DuplicateBranches.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/DuplicateBranches.bqrs
+  metadata:
+    name: Duplicate 'if' branches
+    description: |-
+      If the 'then' and 'else' branches of an 'if' statement are identical, the
+                    conditional may be superfluous, or it may indicate a mistake.
+    kind: problem
+    problem.severity: warning
+    precision: very-high
+    id: go/duplicate-branches
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-561
+  queryHelp: "# Duplicate 'if' branches\nIf the 'then' and 'else' branches of an 'if'\
+    \ statement are identical, this suggests a copy-paste error where the first branch\
+    \ was copied and then not properly adjusted.\n\n\n## Recommendation\nExamine the\
+    \ two branches to find out what operations were meant to perform. If both the\
+    \ branches and the conditions that they check are identical, then the second branch\
+    \ is duplicate code that can be deleted. If the branches are really meant to perform\
+    \ the same operations, it may be clearer to just have a single branch that checks\
+    \ the disjunction of both conditions.\n\n\n## Example\nThe example below shows\
+    \ a buggy implementation of the absolute-value function which checks the sign\
+    \ of its argument, but then returns the same value regardless of the outcome of\
+    \ the check:\n\n\n```go\npackage main\n\nfunc abs(x int) int {\n\tif x >= 0 {\n\
+    \t\treturn x\n\t} else {\n\t\treturn x\n\t}\n}\n\n```\nClearly, the 'else' branch\
+    \ should return `-x` instead:\n\n\n```go\npackage main\n\nfunc absGood(x int)\
+    \ int {\n\tif x >= 0 {\n\t\treturn x\n\t} else {\n\t\treturn -x\n\t}\n}\n\n```\n\
+    \n## References\n* The Go Programming Language Specification: [If statements](https://golang.org/ref/spec#If_statements).\n\
+    * Common Weakness Enumeration: [CWE-561](https://cwe.mitre.org/data/definitions/561.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/DuplicateCondition.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/DuplicateCondition.bqrs
+  metadata:
+    name: Duplicate 'if' condition
+    description: |-
+      If two conditions in an 'if'-'else if' chain are identical, the
+                    second condition will never hold.
+    kind: problem
+    problem.severity: error
+    id: go/duplicate-condition
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-561
+    precision: very-high
+  queryHelp: "# Duplicate 'if' condition\nIf two conditions in an 'if'-'else if' chain\
+    \ are identical, the second condition will never hold. This most likely indicates\
+    \ a copy-paste error where the first condition was copied and then not properly\
+    \ adjusted.\n\n\n## Recommendation\nExamine the two conditions to find out what\
+    \ they were meant to check. If both the conditions and the branches that depend\
+    \ on them are identical, then the second branch is duplicate code that can be\
+    \ deleted. Otherwise, the second condition needs to be adjusted.\n\n\n## Example\n\
+    In the example below, the function `controller` checks its parameter `msg` to\
+    \ determine what operation it is meant to perform. However, the comparison in\
+    \ the 'else if' is identical to the comparison in the 'if', so this branch will\
+    \ never be taken.\n\n\n```go\npackage main\n\nfunc controller(msg string) {\n\t\
+    if msg == \"start\" {\n\t\tstart()\n\t} else if msg == \"start\" {\n\t\tstop()\n\
+    \t} else {\n\t\tpanic(\"Message not understood.\")\n\t}\n}\n\n```\nMost likely,\
+    \ the 'else if' branch should compare `msg` to `\"stop\"`:\n\n\n```go\npackage\
+    \ main\n\nfunc controllerGood(msg string) {\n\tif msg == \"start\" {\n\t\tstart()\n\
+    \t} else if msg == \"stop\" {\n\t\tstop()\n\t} else {\n\t\tpanic(\"Message not\
+    \ understood.\")\n\t}\n}\n\n```\n\n## References\n* The Go Programming Language\
+    \ Specification: [If statements](https://golang.org/ref/spec#If_statements).\n\
+    * Common Weakness Enumeration: [CWE-561](https://cwe.mitre.org/data/definitions/561.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/DuplicateSwitchCase.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/DuplicateSwitchCase.bqrs
+  metadata:
+    name: Duplicate switch case
+    description: |-
+      If two cases in a switch statement have the same label, the second case
+                    will never be executed.
+    kind: problem
+    problem.severity: error
+    id: go/duplicate-switch-case
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-561
+    precision: very-high
+  queryHelp: "# Duplicate switch case\nIf two cases in a 'switch' statement are identical,\
+    \ the second case will never be executed. This most likely indicates a copy-paste\
+    \ error where the first case was copied and then not properly adjusted.\n\n\n\
+    ## Recommendation\nExamine the two cases to find out what they were meant to check.\
+    \ If both the conditions and the bodies are identical, then the second case is\
+    \ duplicate code that can be deleted. Otherwise, the second case needs to be adjusted.\n\
+    \n\n## Example\nIn the example below, the function `controller` checks its parameter\
+    \ `msg` to determine what operation it is meant to perform. However, the condition\
+    \ of the second case is identical to that of the first, so this case will never\
+    \ be executed.\n\n\n```go\npackage main\n\nfunc controller(msg string) {\n\tswitch\
+    \ {\n\tcase msg == \"start\":\n\t\tstart()\n\tcase msg == \"start\":\n\t\tstop()\n\
+    \tdefault:\n\t\tpanic(\"Message not understood.\")\n\t}\n}\n\n```\nMost likely,\
+    \ the second case should compare `msg` to `\"stop\"`:\n\n\n```go\npackage main\n\
+    \nfunc controllerGood(msg string) {\n\tswitch {\n\tcase msg == \"start\":\n\t\t\
+    start()\n\tcase msg == \"stop\":\n\t\tstop()\n\tdefault:\n\t\tpanic(\"Message\
+    \ not understood.\")\n\t}\n}\n\n```\n\n## References\n* The Go Programming Language\
+    \ Specification: [Switch statements](https://golang.org/ref/spec#Switch_statements).\n\
+    * Common Weakness Enumeration: [CWE-561](https://cwe.mitre.org/data/definitions/561.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/ExprHasNoEffect.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/ExprHasNoEffect.bqrs
+  metadata:
+    name: Expression has no effect
+    description: |-
+      An expression that has no effect and is used in a void context is most
+                    likely redundant and may indicate a bug.
+    kind: problem
+    problem.severity: warning
+    id: go/useless-expression
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-480
+             external/cwe/cwe-561
+    precision: very-high
+  queryHelp: "# Expression has no effect\nAn expression that has no effects (such\
+    \ as changing variable values or producing output) and occurs in a context where\
+    \ its value is ignored possibly indicates missing code or a latent bug.\n\n\n\
+    ## Recommendation\nCarefully inspect the expression to ensure it is not a symptom\
+    \ of a bug.\n\n\n## Example\nThe following example shows a named type `Timestamp`\
+    \ that is an alias for `int`, representing time stamps expressed as the number\
+    \ of seconds elapsed since some epoch. The `addDays` method returns a time stamp\
+    \ that is a given number of days after another time stamp, without modifying that\
+    \ time stamp.\n\nHowever, when `addDays` is used in function `test`, its result\
+    \ is discarded, perhaps because the programmer mistakenly assumed that `addDays`\
+    \ updates the time stamp in place.\n\n\n```go\npackage main\n\nimport \"fmt\"\n\
+    \ntype Timestamp int\n\nfunc (t Timestamp) addDays(d int) Timestamp {\n\treturn\
+    \ Timestamp(int(t) + d*24*3600)\n}\n\nfunc test(t Timestamp) {\n\tfmt.Printf(\"\
+    Before: %s\\n\", t)\n\tt.addDays(7)\n\tfmt.Printf(\"After: %s\\n\", t)\n}\n\n\
+    ```\nInstead, the result of `addDays` should be assigned back into `t`:\n\n\n\
+    ```go\npackage main\n\nimport \"fmt\"\n\nfunc testGood(t Timestamp) {\n\tfmt.Printf(\"\
+    Before: %s\\n\", t)\n\tt = t.addDays(7)\n\tfmt.Printf(\"After: %s\\n\", t)\n}\n\
+    \n```\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/ImpossibleInterfaceNilCheck.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/ImpossibleInterfaceNilCheck.bqrs
+  metadata:
+    name: Impossible interface nil check
+    description: Comparing a non-nil interface value to nil may indicate a logic error.
+    kind: problem
+    problem.severity: warning
+    id: go/impossible-interface-nil-check
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-570
+    precision: high
+  queryHelp: "# Impossible interface nil check\nInterface values in Go are type tagged,\
+    \ that is, they are essentially pairs of the form `(value, type)`, where `value`\
+    \ is a non-interface value with the given `type`. Such a pair is never `nil`,\
+    \ even if `value` is `nil`.\n\nIn particular, if a non-interface value `v` is\
+    \ assigned to a variable `x` whose type is an interface, then `x` will never be\
+    \ `nil`, regardless of `v`. Comparing `x` to `nil` is pointless, and may indicate\
+    \ a misunderstanding of Go interface values or some other underlying bug.\n\n\n\
+    ## Recommendation\nCarefully inspect the comparison to ensure it is not a symptom\
+    \ of a bug.\n\n\n## Example\nThe following example shows a declaration of a function\
+    \ `fetch` which fetches the contents of a URL, returning either the contents or\
+    \ an error value, which is a pointer to a custom error type `RequestError` (not\
+    \ shown). The function `niceFetch` wraps this function, printing out either the\
+    \ URL contents or an error message.\n\n\n```go\npackage main\n\nimport \"fmt\"\
+    \n\nfunc fetch(url string) (string, *RequestError)\n\nfunc niceFetch(url string)\
+    \ {\n\tvar s string\n\tvar e error\n\ts, e = fetch(url)\n\tif e != nil {\n\t\t\
+    fmt.Printf(\"Unable to fetch URL: %v\\n\", e)\n\t} else {\n\t\tfmt.Printf(\"URL\
+    \ contents: %s\\n\", s)\n\t}\n}\n\n```\nHowever, because `e` is declared to be\
+    \ of type `error`, which is an interface, the `nil` check will never succeed,\
+    \ since `e` can never be `nil`.\n\nIn this case, the problem can be solved by\
+    \ using a short variable declaration using operator `:=`, which will automatically\
+    \ infer the more precise non-interface type `*ResourceError` for `e`, making the\
+    \ `nil` check behave as expected.\n\n\n```go\npackage main\n\nimport \"fmt\"\n\
+    \nfunc niceFetchGood(url string) {\n\ts, e := fetch(url)\n\tif e != nil {\n\t\t\
+    fmt.Printf(\"Unable to fetch URL: %v\\n\", e)\n\t} else {\n\t\tfmt.Printf(\"URL\
+    \ contents: %s\\n\", s)\n\t}\n}\n\n```\n\n## References\n* Jordan Orelli: [How\
+    \ to use interfaces in Go](https://jordanorelli.com/post/32665860244/how-to-use-interfaces-in-go).\n\
+    * Go Frequently Asked Questions: [Why is my nil error value not equal to nil?](https://golang.org/doc/faq#nil_error).\n\
+    * Common Weakness Enumeration: [CWE-570](https://cwe.mitre.org/data/definitions/570.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/NegativeLengthCheck.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/NegativeLengthCheck.bqrs
+  metadata:
+    name: Redundant check for negative value
+    description: |-
+      Checking whether the result of 'len' or 'cap' is negative is pointless,
+                    since these functions always returns a non-negative number. It is also
+                    pointless checking if an unsigned integer is negative, as it can only
+                    hold non-negative values.
+    kind: problem
+    problem.severity: warning
+    precision: very-high
+    id: go/negative-length-check
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-571
+  queryHelp: "# Redundant check for negative value\nThe built-in `len` function returns\
+    \ the length of an array, slice or similar, which is never less than zero. Hence,\
+    \ checking whether the result of a call to `len` is negative is either redundant\
+    \ or indicates a logic mistake.\n\nThe same applies to the built-in function `cap`,\
+    \ and to unsigned integer values.\n\n\n## Recommendation\nExamine the length check\
+    \ to see whether it is redundant and can be removed, or a mistake that should\
+    \ be fixed.\n\n\n## Example\nThe example below shows a function that returns the\
+    \ first element of an array, triggering a panic if the array is empty:\n\n\n```go\n\
+    package main\n\nfunc getFirst(xs []int) int {\n\tif len(xs) < 0 {\n\t\tpanic(\"\
+    No elements provided\")\n\t}\n\treturn xs[0]\n}\n\n```\nHowever, the emptiness\
+    \ check is ineffective: since `len(xs)` is never less than zero, the condition\
+    \ will never hold and no panic will be triggered. Instead, the index expression\
+    \ `xs[0]` will cause a panic.\n\nThe check should be rewritten like this:\n\n\n\
+    ```go\npackage main\n\nfunc getFirstGood(xs []int) int {\n\tif len(xs) == 0 {\n\
+    \t\tpanic(\"No elements provided\")\n\t}\n\treturn xs[0]\n}\n\n```\n\n## References\n\
+    * Package builtin: [func cap](https://golang.org/pkg/builtin/#cap).\n* Package\
+    \ builtin: [func len](https://golang.org/pkg/builtin/#len).\n* Common Weakness\
+    \ Enumeration: [CWE-571](https://cwe.mitre.org/data/definitions/571.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/RedundantExpr.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/RedundantExpr.bqrs
+  metadata:
+    name: Identical operands
+    description: |-
+      Passing identical, or seemingly identical, operands to an
+                    operator such as subtraction or conjunction may indicate a typo;
+                    even if it is intentional, it makes the code hard to read.
+    kind: problem
+    problem.severity: warning
+    id: go/redundant-operation
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-480
+             external/cwe/cwe-561
+    precision: very-high
+  queryHelp: "# Identical operands\nMany arithmetic or logical operators yield a trivial\
+    \ result when applied to identical operands: for instance, `x-x` is zero if `x`\
+    \ is a number, and `NaN` otherwise; `x&x` is always equal to `x`. Code like this\
+    \ is often the result of a typo, such as misspelling a variable name.\n\n\n##\
+    \ Recommendation\nCarefully inspect the expression to ensure it is not a symptom\
+    \ of a bug.\n\n\n## Example\nIn the example below, the function `avg` is intended\
+    \ to compute the average of two numbers `x` and `y`. However, the programmer accidentally\
+    \ used `x` twice, so the function just returns `x`:\n\n\n```go\npackage main\n\
+    \nfunc avg(x, y float64) float64 {\n\treturn (x + x) / 2\n}\n\n```\nThis problem\
+    \ can be fixed by correcting the typo:\n\n\n```go\npackage main\n\nfunc avgGood(x,\
+    \ y float64) float64 {\n\treturn (x + y) / 2\n}\n\n```\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/RedundantRecover.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/RedundantRecover.bqrs
+  metadata:
+    name: Redundant call to recover
+    description: |-
+      Calling 'recover' in a function which isn't called using a defer
+                    statement has no effect. Also, putting 'recover' directly in a
+                    defer statement has no effect.
+    kind: problem
+    problem.severity: warning
+    id: go/redundant-recover
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-248
+    precision: high
+  queryHelp: "# Redundant call to recover\nThe built-in `recover` function is only\
+    \ useful inside deferred functions. Calling it in a function that is never deferred\
+    \ means that it will always return `nil` and it will never regain control of a\
+    \ panicking goroutine. The same is true of calling `recover` directly in a defer\
+    \ statement.\n\n\n## Recommendation\nCarefully inspect the code to determine whether\
+    \ it is a mistake that should be fixed.\n\n\n## Example\nIn the example below,\
+    \ the function `fun1` is intended to recover from the panic. However, the function\
+    \ that is deferred calls another function, which then calls `recover`:\n\n\n```go\n\
+    package main\n\nimport \"fmt\"\n\nfunc callRecover1() {\n\tif recover() != nil\
+    \ {\n\t\tfmt.Printf(\"recovered\")\n\t}\n}\n\nfunc fun1() {\n\tdefer func() {\n\
+    \t\tcallRecover1()\n\t}()\n\tpanic(\"1\")\n}\n\n```\nThis problem can be fixed\
+    \ by deferring the call to the function which calls `recover`:\n\n\n```go\npackage\
+    \ main\n\nimport \"fmt\"\n\nfunc callRecover1Good() {\n\tif recover() != nil {\n\
+    \t\tfmt.Printf(\"recovered\")\n\t}\n}\n\nfunc fun1Good() {\n\tdefer callRecover1Good()\n\
+    \tpanic(\"1\")\n}\n\n```\nIn the following example, `recover` is called directly\
+    \ in a defer statement, which has no effect, so the panic is not caught.\n\n\n\
+    ```go\npackage main\n\nfunc fun2() {\n\tdefer recover()\n\tpanic(\"2\")\n}\n\n\
+    ```\nWe can fix this by instead deferring an anonymous function which calls `recover`.\n\
+    \n\n```go\npackage main\n\nfunc fun2Good() {\n\tdefer func() { recover() }()\n\
+    \tpanic(\"2\")\n}\n\n```\n\n## References\n* [Defer, Panic, and Recover - The\
+    \ Go Blog](https://blog.golang.org/defer-panic-and-recover).\n* Common Weakness\
+    \ Enumeration: [CWE-248](https://cwe.mitre.org/data/definitions/248.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/SelfAssignment.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/SelfAssignment.bqrs
+  metadata:
+    name: Self assignment
+    description: Assigning a variable to itself has no effect.
+    kind: problem
+    problem.severity: warning
+    id: go/redundant-assignment
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-480
+             external/cwe/cwe-561
+    precision: high
+  queryHelp: "# Self assignment\nAssigning a variable to itself typically indicates\
+    \ a mistake such as a missing qualifier or a misspelled variable name.\n\n\n##\
+    \ Recommendation\nCarefully inspect the assignment to check for misspellings or\
+    \ missing qualifiers.\n\n\n## Example\nIn the example below, the struct type `Rect`\
+    \ has two setter methods `setWidth` and `setHeight` that are meant to be used\
+    \ to update the `width` and `height` fields, respectively:\n\n\n```go\npackage\
+    \ main\n\ntype Rect struct {\n\tx, y, width, height int\n}\n\nfunc (r *Rect) setWidth(width\
+    \ int) {\n\tr.width = width\n}\n\nfunc (r *Rect) setHeight(height int) {\n\theight\
+    \ = height\n}\n\n```\nNote, however, that in `setHeight` the programmer forgot\
+    \ to qualify the left-hand side of the assignment with the receiver variable `r`,\
+    \ so the method performs a useless assignment of the `width` parameter to itself\
+    \ and leaves the `width` field unchanged.\n\nTo fix this issue, insert a qualifier:\n\
+    \n\n```go\npackage main\n\nfunc (r *Rect) setHeightGood(height int) {\n\tr.height\
+    \ = height\n}\n\n```\n\n## References\n* The Go Programming Language Specification:\
+    \ [Assignments](https://golang.org/ref/spec#Assignments).\n* Common Weakness Enumeration:\
+    \ [CWE-480](https://cwe.mitre.org/data/definitions/480.html).\n* Common Weakness\
+    \ Enumeration: [CWE-561](https://cwe.mitre.org/data/definitions/561.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/ShiftOutOfRange.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/ShiftOutOfRange.bqrs
+  metadata:
+    name: Shift out of range
+    description: |-
+      Shifting by more than the number of bits in the type of the left-hand
+                    side always yields 0 or -1.
+    kind: problem
+    problem.severity: warning
+    id: go/shift-out-of-range
+    precision: very-high
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-197
+  queryHelp: "# Shift out of range\nShifting an integer value by more than the number\
+    \ of bits in its type always results in -1 for right-shifts of negative values\
+    \ and 0 for other shifts. Hence, such a shift expression is either redundant or\
+    \ indicates a logic mistake.\n\n\n## Recommendation\nExamine the length check\
+    \ to see whether it is redundant and can be removed, or a mistake that should\
+    \ be fixed.\n\n\n## Example\nThe following code snippet attempts to compute the\
+    \ value 2<sup>40</sup> (1099511627776). However, since the left operand `base`\
+    \ is of type `int32` (32 bits), the shift operation overflows, yielding zero.\n\
+    \n\n```go\npackage main\n\nfunc shift(base int32) int32 {\n\treturn base << 40\n\
+    }\n\nvar x1 = shift(1)\n\n```\nTo prevent this, the type of `base` should be changed\
+    \ to `int64`:\n\n\n```go\npackage main\n\nfunc shiftGood(base int64) int64 {\n\
+    \treturn base << 40\n}\n\nvar x2 = shiftGood(1)\n\n```\n\n## References\n* The\
+    \ Go Programming Language Specification: [Arithmetic operators](https://golang.org/ref/spec#Arithmetic_operators).\n\
+    * Common Weakness Enumeration: [CWE-197](https://cwe.mitre.org/data/definitions/197.html).\n"
+ -
+  pack: codeql/go-queries#0
+  relativeQueryPath: RedundantCode/UnreachableStatement.ql
+  relativeBqrsPath: codeql/go-queries/RedundantCode/UnreachableStatement.bqrs
+  metadata:
+    name: Unreachable statement
+    description: |-
+      Unreachable statements are often indicative of missing code or latent bugs
+                    and should be avoided.
+    kind: problem
+    problem.severity: warning
+    id: go/unreachable-statement
+    tags: |-
+      quality
+             reliability
+             correctness
+             external/cwe/cwe-561
+    precision: very-high
+  queryHelp: "# Unreachable statement\nAn unreachable statement often indicates missing\
+    \ code or a latent bug and should be examined carefully.\n\n\n## Recommendation\n\
+    Examine the surrounding code to determine why the statement has become unreachable.\
+    \ If it is no longer needed, remove the statement.\n\n\n## Example\nIn the following\
+    \ example, the body of the `for` statement cannot terminate normally, so the update\
+    \ statement `i++` becomes unreachable:\n\n\n```go\npackage main\n\nfunc mul(xs\
+    \ []int) int {\n\tres := 1\n\tfor i := 0; i < len(xs); i++ {\n\t\tx := xs[i]\n\
+    \t\tres *= x\n\t\tif res == 0 {\n\t\t}\n\t\treturn 0\n\t}\n\treturn res\n}\n\n\
+    ```\nMost likely, the `return` statement should be moved inside the `if` statement:\n\
+    \n\n```go\npackage main\n\nfunc mulGood(xs []int) int {\n\tres := 1\n\tfor i :=\
+    \ 0; i < len(xs); i++ {\n\t\tx := xs[i]\n\t\tres *= x\n\t\tif res == 0 {\n\t\t\
+    \treturn 0\n\t\t}\n\t}\n\treturn res\n}\n\n```\n\n## References\n* Wikipedia:\
+    \ [Unreachable code](http://en.wikipedia.org/wiki/Unreachable_code).\n* Common\
+    \ Weakness Enumeration: [CWE-561](https://cwe.mitre.org/data/definitions/561.html).\n"
+extensionPacks: []
+packs:
+  codeql/threat-models#2:
+    name: codeql/threat-models
+    version: 1.0.33
+    isLibrary: true
+    isExtensionPack: false
+    localPath: file:///Users/hasanbasri/.codeql/packages/codeql/go-queries/1.4.7/.codeql/libraries/codeql/threat-models/1.0.33/
+    localPackDefinitionFile: file:///Users/hasanbasri/.codeql/packages/codeql/go-queries/1.4.7/.codeql/libraries/codeql/threat-models/1.0.33/qlpack.yml
+    headSha: aa3000df1310b332ba1c84afec3bacb0aeb4dbbd
+    runDataExtensions: []
+  codeql/go-queries#0:
+    name: codeql/go-queries
+    version: 1.4.7
+    isLibrary: false
+    isExtensionPack: false
+    localPath: file:///Users/hasanbasri/.codeql/packages/codeql/go-queries/1.4.7/
+    localPackDefinitionFile: file:///Users/hasanbasri/.codeql/packages/codeql/go-queries/1.4.7/qlpack.yml
+    headSha: aa3000df1310b332ba1c84afec3bacb0aeb4dbbd
+    runDataExtensions:
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/archive.tar.model.yml
+      index: 0
+      firstRowId: 0
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/archive.zip.model.yml
+      index: 0
+      firstRowId: 5
+      rowCount: 6
+      locations:
+        lineNumbers: A=6+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/bufio.model.yml
+      index: 0
+      firstRowId: 11
+      rowCount: 17
+      locations:
+        lineNumbers: A=6+1*16
+        columnNumbers: A=9*17
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/builtin.model.yml
+      index: 0
+      firstRowId: 28
+      rowCount: 8
+      locations:
+        lineNumbers: A=6+1*7
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/bytes.model.yml
+      index: 0
+      firstRowId: 36
+      rowCount: 43
+      locations:
+        lineNumbers: A=6+1*42
+        columnNumbers: A=9*43
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/clevergo.tech.clevergo.model.yml
+      index: 0
+      firstRowId: 79
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/clevergo.tech.clevergo.model.yml
+      index: 1
+      firstRowId: 81
+      rowCount: 1
+      locations:
+        lineNumbers: A=12
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/cloud.google.com.go.bigquery.model.yml
+      index: 0
+      firstRowId: 82
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/compress.bzip2.model.yml
+      index: 0
+      firstRowId: 83
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/compress.flate.model.yml
+      index: 0
+      firstRowId: 84
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/compress.gzip.model.yml
+      index: 0
+      firstRowId: 88
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/compress.lzw.model.yml
+      index: 0
+      firstRowId: 91
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/compress.zlib.model.yml
+      index: 0
+      firstRowId: 92
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/container.heap.model.yml
+      index: 0
+      firstRowId: 96
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/container.list.model.yml
+      index: 0
+      firstRowId: 101
+      rowCount: 20
+      locations:
+        lineNumbers: A=6+1*19
+        columnNumbers: A=9*20
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/container.ring.model.yml
+      index: 0
+      firstRowId: 121
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/context.model.yml
+      index: 0
+      firstRowId: 126
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/crypto.cipher.model.yml
+      index: 0
+      firstRowId: 131
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/crypto.model.yml
+      index: 0
+      firstRowId: 134
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/crypto.rsa.model.yml
+      index: 0
+      firstRowId: 135
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/crypto.tls.model.yml
+      index: 0
+      firstRowId: 137
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/crypto.x509.model.yml
+      index: 0
+      firstRowId: 140
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/database.sql.driver.model.yml
+      index: 0
+      firstRowId: 141
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/database.sql.driver.model.yml
+      index: 1
+      firstRowId: 145
+      rowCount: 6
+      locations:
+        lineNumbers: A=14+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/database.sql.driver.model.yml
+      index: 2
+      firstRowId: 151
+      rowCount: 5
+      locations:
+        lineNumbers: A=24+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/database.sql.model.yml
+      index: 0
+      firstRowId: 156
+      rowCount: 14
+      locations:
+        lineNumbers: A=6+1*13
+        columnNumbers: A=9*14
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/database.sql.model.yml
+      index: 1
+      firstRowId: 170
+      rowCount: 24
+      locations:
+        lineNumbers: A=24+1*23
+        columnNumbers: A=9*24
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/database.sql.model.yml
+      index: 2
+      firstRowId: 194
+      rowCount: 7
+      locations:
+        lineNumbers: A=52+1*6
+        columnNumbers: A=9*7
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.ascii85.model.yml
+      index: 0
+      firstRowId: 201
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.asn1.model.yml
+      index: 0
+      firstRowId: 203
+      rowCount: 8
+      locations:
+        lineNumbers: A=6+1*7
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.base32.model.yml
+      index: 0
+      firstRowId: 211
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.base64.model.yml
+      index: 0
+      firstRowId: 214
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.binary.model.yml
+      index: 0
+      firstRowId: 217
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.csv.model.yml
+      index: 0
+      firstRowId: 219
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.gob.model.yml
+      index: 0
+      firstRowId: 224
+      rowCount: 7
+      locations:
+        lineNumbers: A=6+1*6
+        columnNumbers: A=9*7
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.hex.model.yml
+      index: 0
+      firstRowId: 231
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.json.model.yml
+      index: 0
+      firstRowId: 234
+      rowCount: 14
+      locations:
+        lineNumbers: A=6+1*13
+        columnNumbers: A=9*14
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.model.yml
+      index: 0
+      firstRowId: 248
+      rowCount: 8
+      locations:
+        lineNumbers: A=6+1*7
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.pem.model.yml
+      index: 0
+      firstRowId: 256
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/encoding.xml.model.yml
+      index: 0
+      firstRowId: 259
+      rowCount: 23
+      locations:
+        lineNumbers: A=6+1*22
+        columnNumbers: A=9*23
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/errors.model.yml
+      index: 0
+      firstRowId: 282
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/expvar.model.yml
+      index: 0
+      firstRowId: 285
+      rowCount: 6
+      locations:
+        lineNumbers: A=6+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/fmt.model.yml
+      index: 0
+      firstRowId: 291
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/fmt.model.yml
+      index: 1
+      firstRowId: 294
+      rowCount: 16
+      locations:
+        lineNumbers: A=13+1*15
+        columnNumbers: A=9*16
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.antchfx.htmlquery.model.yml
+      index: 0
+      firstRowId: 310
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.antchfx.jsonquery.model.yml
+      index: 0
+      firstRowId: 314
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.antchfx.xmlquery.model.yml
+      index: 0
+      firstRowId: 318
+      rowCount: 8
+      locations:
+        lineNumbers: A=6+1*7
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.antchfx.xpath.model.yml
+      index: 0
+      firstRowId: 326
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.appleboy.gin-jwt.model.yml
+      index: 0
+      firstRowId: 330
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.client.orm.model.yml
+      index: 0
+      firstRowId: 331
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.client.orm.model.yml
+      index: 1
+      firstRowId: 334
+      rowCount: 13
+      locations:
+        lineNumbers: A=13+1*12
+        columnNumbers: A=9*13
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.client.orm.model.yml
+      index: 2
+      firstRowId: 347
+      rowCount: 30
+      locations:
+        lineNumbers: A=30+1*29
+        columnNumbers: A=9*30
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.core.logs.model.yml
+      index: 0
+      firstRowId: 377
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.core.logs.model.yml
+      index: 1
+      firstRowId: 380
+      rowCount: 22
+      locations:
+        lineNumbers: A=13+1*21
+        columnNumbers: A=9*22
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.core.utils.model.yml
+      index: 0
+      firstRowId: 402
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.core.utils.model.yml
+      index: 1
+      firstRowId: 405
+      rowCount: 1
+      locations:
+        lineNumbers: A=13
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.core.utils.model.yml
+      index: 2
+      firstRowId: 406
+      rowCount: 13
+      locations:
+        lineNumbers: A=18+1*12
+        columnNumbers: A=9*13
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.server.web.context.model.yml
+      index: 0
+      firstRowId: 419
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.server.web.context.model.yml
+      index: 1
+      firstRowId: 422
+      rowCount: 2
+      locations:
+        lineNumbers: A=14+2
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.server.web.context.model.yml
+      index: 2
+      firstRowId: 424
+      rowCount: 1
+      locations:
+        lineNumbers: A=21
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.server.web.context.model.yml
+      index: 3
+      firstRowId: 425
+      rowCount: 15
+      locations:
+        lineNumbers: A=26+1*14
+        columnNumbers: A=9*15
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.server.web.model.yml
+      index: 0
+      firstRowId: 440
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.server.web.model.yml
+      index: 1
+      firstRowId: 443
+      rowCount: 16
+      locations:
+        lineNumbers: A=14+1*10+2+1*3+2
+        columnNumbers: A=9*16
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.server.web.model.yml
+      index: 2
+      firstRowId: 459
+      rowCount: 7
+      locations:
+        lineNumbers: A=36+1*6
+        columnNumbers: A=9*7
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.beego.beego.server.web.model.yml
+      index: 3
+      firstRowId: 466
+      rowCount: 6
+      locations:
+        lineNumbers: A=47+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.caarlos0.env.model.yml
+      index: 0
+      firstRowId: 472
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.caarlos0.env.model.yml
+      index: 1
+      firstRowId: 477
+      rowCount: 2
+      locations:
+        lineNumbers: A=15+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.christrenkamp.goxpath.model.yml
+      index: 0
+      firstRowId: 479
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.codeskyblue.go-sh.model.yml
+      index: 0
+      firstRowId: 482
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.couchbase.gocb.model.yml
+      index: 0
+      firstRowId: 486
+      rowCount: 6
+      locations:
+        lineNumbers: A=6+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.couchbase.gocb.model.yml
+      index: 1
+      firstRowId: 492
+      rowCount: 22
+      locations:
+        lineNumbers: A=16+1*21
+        columnNumbers: A=9*22
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.couchbase.gocb.model.yml
+      index: 2
+      firstRowId: 514
+      rowCount: 8
+      locations:
+        lineNumbers: A=42+1*7
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.couchbase.gocb.model.yml
+      index: 3
+      firstRowId: 522
+      rowCount: 48
+      locations:
+        lineNumbers: A=54+1*47
+        columnNumbers: A=9*48
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.cristalhq.jwt.model.yml
+      index: 0
+      firstRowId: 570
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.davecgh.go-spew.spew.model.yml
+      index: 0
+      firstRowId: 571
+      rowCount: 9
+      locations:
+        lineNumbers: A=6+1*8
+        columnNumbers: A=9*9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.dgrijalva.jwt-go.model.yml
+      index: 0
+      firstRowId: 580
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.dgrijalva.jwt-go.model.yml
+      index: 1
+      firstRowId: 583
+      rowCount: 9
+      locations:
+        lineNumbers: A=13+1*8
+        columnNumbers: A=9*9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.elazarl.goproxy.model.yml
+      index: 0
+      firstRowId: 592
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.elazarl.goproxy.model.yml
+      index: 1
+      firstRowId: 594
+      rowCount: 2
+      locations:
+        lineNumbers: A=12+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.elazarl.goproxy.model.yml
+      index: 2
+      firstRowId: 596
+      rowCount: 2
+      locations:
+        lineNumbers: A=19+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.emicklei.go-restful.model.yml
+      index: 0
+      firstRowId: 598
+      rowCount: 7
+      locations:
+        lineNumbers: A=6+1*6
+        columnNumbers: A=9*7
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.evanphx.json-patch.model.yml
+      index: 0
+      firstRowId: 605
+      rowCount: 12
+      locations:
+        lineNumbers: A=6+1*11
+        columnNumbers: A=9*12
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.form3tech-oss.jwt-go.model.yml
+      index: 0
+      firstRowId: 617
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gin-gonic.gin.model.yml
+      index: 0
+      firstRowId: 619
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gin-gonic.gin.model.yml
+      index: 1
+      firstRowId: 622
+      rowCount: 2
+      locations:
+        lineNumbers: A=13+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gin-gonic.gin.model.yml
+      index: 2
+      firstRowId: 624
+      rowCount: 46
+      locations:
+        lineNumbers: A=19+1*45
+        columnNumbers: A=9*46
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-chi.chi.model.yml
+      index: 0
+      firstRowId: 670
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-chi.jwtauth.model.yml
+      index: 0
+      firstRowId: 673
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-jose.go-jose.jwt.model.yml
+      index: 0
+      firstRowId: 674
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-jose.go-jose.jwt.model.yml
+      index: 1
+      firstRowId: 678
+      rowCount: 1
+      locations:
+        lineNumbers: A=14
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-jose.go-jose.jwt.model.yml
+      index: 2
+      firstRowId: 679
+      rowCount: 4
+      locations:
+        lineNumbers: A=19+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-jose.go-jose.model.yml
+      index: 0
+      firstRowId: 683
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-jose.go-jose.model.yml
+      index: 1
+      firstRowId: 687
+      rowCount: 2
+      locations:
+        lineNumbers: A=14+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-kit.kit.auth.jwt.model.yml
+      index: 0
+      firstRowId: 689
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-pg.pg.orm.model.yml
+      index: 0
+      firstRowId: 690
+      rowCount: 6
+      locations:
+        lineNumbers: A=6+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-xmlpath.xmlpath.model.yml
+      index: 0
+      firstRowId: 696
+      rowCount: 7
+      locations:
+        lineNumbers: A=6+1*6
+        columnNumbers: A=9*7
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.go-xmlpath.xmlpath.model.yml
+      index: 1
+      firstRowId: 703
+      rowCount: 2
+      locations:
+        lineNumbers: A=17+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gobuffalo.envy.model.yml
+      index: 0
+      firstRowId: 705
+      rowCount: 7
+      locations:
+        lineNumbers: A=6+1*6
+        columnNumbers: A=9*7
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gobwas.ws.model.yml
+      index: 0
+      firstRowId: 712
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gofiber.fiber.model.yml
+      index: 0
+      firstRowId: 714
+      rowCount: 5
+      locations:
+        lineNumbers: A=7+1*3+2
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gogf.gf-jwt.model.yml
+      index: 0
+      firstRowId: 719
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gogf.gf.database.gdb.model.yml
+      index: 0
+      firstRowId: 720
+      rowCount: 51
+      locations:
+        lineNumbers: A=7+1*50
+        columnNumbers: A=9*51
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gogf.gf.database.gdb.model.yml
+      index: 1
+      firstRowId: 771
+      rowCount: 39
+      locations:
+        lineNumbers: A=63+1*9+2+1*7+2+1*13+2+1*6
+        columnNumbers: A=9*39
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gogf.gf.database.gdb.model.yml
+      index: 2
+      firstRowId: 810
+      rowCount: 21
+      locations:
+        lineNumbers: A=109+1*5+2+1*14
+        columnNumbers: A=9*21
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.golang-jwt.jwt.model.yml
+      index: 0
+      firstRowId: 831
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.golang-jwt.jwt.model.yml
+      index: 1
+      firstRowId: 834
+      rowCount: 11
+      locations:
+        lineNumbers: A=13+1*10
+        columnNumbers: A=9*11
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.golang.glog.model.yml
+      index: 0
+      firstRowId: 845
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.golang.glog.model.yml
+      index: 1
+      firstRowId: 848
+      rowCount: 90
+      locations:
+        lineNumbers: A=13+1*89
+        columnNumbers: A=9*90
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.golang.protobuf.proto.model.yml
+      index: 0
+      firstRowId: 938
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gorilla.mux.model.yml
+      index: 0
+      firstRowId: 942
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.gorilla.websocket.model.yml
+      index: 0
+      firstRowId: 943
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.hashicorp.go-envparse.model.yml
+      index: 0
+      firstRowId: 946
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.jmoiron.sqlx.model.yml
+      index: 0
+      firstRowId: 947
+      rowCount: 49
+      locations:
+        lineNumbers: A=6+1*48
+        columnNumbers: A=9*49
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.jmoiron.sqlx.model.yml
+      index: 1
+      firstRowId: 996
+      rowCount: 12
+      locations:
+        lineNumbers: A=59+1*11
+        columnNumbers: A=9*12
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.jmoiron.sqlx.model.yml
+      index: 2
+      firstRowId: 1008
+      rowCount: 11
+      locations:
+        lineNumbers: A=75+1*10
+        columnNumbers: A=9*11
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.joho.godotenv.model.yml
+      index: 0
+      firstRowId: 1019
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.json-iterator.go.model.yml
+      index: 0
+      firstRowId: 1023
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.kataras.iris.context.model.yml
+      index: 0
+      firstRowId: 1027
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.kataras.iris.context.model.yml
+      index: 1
+      firstRowId: 1029
+      rowCount: 6
+      locations:
+        lineNumbers: A=12+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.kataras.iris.middleware.jwt.model.yml
+      index: 0
+      firstRowId: 1035
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.kataras.jwt.model.yml
+      index: 0
+      firstRowId: 1037
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.kelseyhightower.envconfig.model.yml
+      index: 0
+      firstRowId: 1042
+      rowCount: 6
+      locations:
+        lineNumbers: A=6+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.labstack.echo.model.yml
+      index: 0
+      firstRowId: 1048
+      rowCount: 3
+      locations:
+        lineNumbers: A=7+1+2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.labstack.echo.model.yml
+      index: 1
+      firstRowId: 1051
+      rowCount: 2
+      locations:
+        lineNumbers: A=15+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.labstack.echo.model.yml
+      index: 2
+      firstRowId: 1053
+      rowCount: 12
+      locations:
+        lineNumbers: A=22+1*11
+        columnNumbers: A=9*12
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.lestrrat-go.jwx.jwk.model.yml
+      index: 0
+      firstRowId: 1065
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.lestrrat-go.jwx.model.yml
+      index: 0
+      firstRowId: 1066
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.lestrrat-go.libxml2.parser.model.yml
+      index: 0
+      firstRowId: 1067
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.lestrrat.go-jwx.jwk.model.yml
+      index: 0
+      firstRowId: 1070
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.masterminds.squirrel.model.yml
+      index: 0
+      firstRowId: 1071
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.masterminds.squirrel.model.yml
+      index: 1
+      firstRowId: 1074
+      rowCount: 27
+      locations:
+        lineNumbers: A=13+1*26
+        columnNumbers: A=9*27
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.masterminds.squirrel.model.yml
+      index: 2
+      firstRowId: 1101
+      rowCount: 32
+      locations:
+        lineNumbers: A=44+1*4+2+1*3+3+1*4+2+1*11+3+1*5
+        columnNumbers: A=9*32
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.moovweb.gokogiri.xml.model.yml
+      index: 0
+      firstRowId: 1133
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.moovweb.gokogiri.xml.model.yml
+      index: 1
+      firstRowId: 1135
+      rowCount: 4
+      locations:
+        lineNumbers: A=12+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.moovweb.gokogiri.xpath.model.yml
+      index: 0
+      firstRowId: 1139
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.moovweb.gokogiri.xpath.model.yml
+      index: 1
+      firstRowId: 1141
+      rowCount: 1
+      locations:
+        lineNumbers: A=12
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.ory.fosite.token.jwt.model.yml
+      index: 0
+      firstRowId: 1142
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.revel.revel.model.yml
+      index: 0
+      firstRowId: 1144
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.revel.revel.model.yml
+      index: 1
+      firstRowId: 1146
+      rowCount: 1
+      locations:
+        lineNumbers: A=12
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.revel.revel.model.yml
+      index: 2
+      firstRowId: 1147
+      rowCount: 23
+      locations:
+        lineNumbers: A=17+1*22
+        columnNumbers: A=9*23
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.revel.revel.model.yml
+      index: 3
+      firstRowId: 1170
+      rowCount: 1
+      locations:
+        lineNumbers: A=44
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.revel.revel.model.yml
+      index: 4
+      firstRowId: 1171
+      rowCount: 10
+      locations:
+        lineNumbers: A=49+1*9
+        columnNumbers: A=9*10
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.rqlite.gorqlite.model.yml
+      index: 0
+      firstRowId: 1181
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.rqlite.gorqlite.model.yml
+      index: 1
+      firstRowId: 1184
+      rowCount: 8
+      locations:
+        lineNumbers: A=13+1*7
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.rqlite.gorqlite.model.yml
+      index: 2
+      firstRowId: 1192
+      rowCount: 24
+      locations:
+        lineNumbers: A=25+1*23
+        columnNumbers: A=9*24
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.rqlite.gorqlite.model.yml
+      index: 3
+      firstRowId: 1216
+      rowCount: 2
+      locations:
+        lineNumbers: A=53+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.santhosh-tekuri.xpathparser.model.yml
+      index: 0
+      firstRowId: 1218
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.sendgrid.sendgrid-go.helpers.mail.model.yml
+      index: 0
+      firstRowId: 1220
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.sirupsen.logrus.model.yml
+      index: 0
+      firstRowId: 1221
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.sirupsen.logrus.model.yml
+      index: 1
+      firstRowId: 1223
+      rowCount: 145
+      locations:
+        lineNumbers: A=12+1*39+2+1*33+2+1*26+2+1*43
+        columnNumbers: A=9*145
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.spf13.afero.model.yml
+      index: 0
+      firstRowId: 1368
+      rowCount: 34
+      locations:
+        lineNumbers: A=6+1*33
+        columnNumbers: A=9*34
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.uptrace.bun.model.yml
+      index: 0
+      firstRowId: 1402
+      rowCount: 8
+      locations:
+        lineNumbers: A=6+1*3+4+1+3+1
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.uptrace.bun.model.yml
+      index: 1
+      firstRowId: 1410
+      rowCount: 63
+      locations:
+        lineNumbers: A=23+1*62
+        columnNumbers: A=9*63
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.valyala.fasthttp.model.yml
+      index: 0
+      firstRowId: 1473
+      rowCount: 35
+      locations:
+        lineNumbers: A=7+1*24+2+1*7+2+1
+        columnNumbers: A=9*35
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.valyala.fasthttp.model.yml
+      index: 1
+      firstRowId: 1508
+      rowCount: 5
+      locations:
+        lineNumbers: A=48+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/github.com.valyala.fasthttp.model.yml
+      index: 2
+      firstRowId: 1513
+      rowCount: 50
+      locations:
+        lineNumbers: A=57+1*49
+        columnNumbers: A=9*50
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/go.mongodb.org.mongo-driver.mongo.model.yml
+      index: 0
+      firstRowId: 1563
+      rowCount: 11
+      locations:
+        lineNumbers: A=6+1*10
+        columnNumbers: A=9*11
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/go.mongodb.org.mongo-driver.mongo.model.yml
+      index: 1
+      firstRowId: 1574
+      rowCount: 14
+      locations:
+        lineNumbers: A=21+1*13
+        columnNumbers: A=9*14
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/go.mongodb.org.mongo-driver.mongo.model.yml
+      index: 2
+      firstRowId: 1588
+      rowCount: 5
+      locations:
+        lineNumbers: A=39+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/go.uber.org.zap.model.yml
+      index: 0
+      firstRowId: 1593
+      rowCount: 33
+      locations:
+        lineNumbers: A=6+1*32
+        columnNumbers: A=9*33
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/go.uber.org.zap.model.yml
+      index: 1
+      firstRowId: 1626
+      rowCount: 11
+      locations:
+        lineNumbers: A=43+1*10
+        columnNumbers: A=9*11
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/golang.org.x.crypto.ssh.model.yml
+      index: 0
+      firstRowId: 1637
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/golang.org.x.net.context.model.yml
+      index: 0
+      firstRowId: 1641
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/golang.org.x.net.html.model.yml
+      index: 0
+      firstRowId: 1646
+      rowCount: 16
+      locations:
+        lineNumbers: A=6+1*15
+        columnNumbers: A=9*16
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/golang.org.x.net.websocket.model.yml
+      index: 0
+      firstRowId: 1662
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/google.golang.org.protobuf.internal.encoding.text.model.yml
+      index: 0
+      firstRowId: 1664
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/google.golang.org.protobuf.internal.impl.model.yml
+      index: 0
+      firstRowId: 1665
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/google.golang.org.protobuf.proto.model.yml
+      index: 0
+      firstRowId: 1667
+      rowCount: 8
+      locations:
+        lineNumbers: A=6+1*7
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/google.golang.org.protobuf.reflect.protoreflect.model.yml
+      index: 0
+      firstRowId: 1675
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/gopkg.in.macaron.model.yml
+      index: 0
+      firstRowId: 1676
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/gopkg.in.macaron.model.yml
+      index: 1
+      firstRowId: 1677
+      rowCount: 12
+      locations:
+        lineNumbers: A=11+1*11
+        columnNumbers: A=9*12
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/gopkg.in.macaron.model.yml
+      index: 2
+      firstRowId: 1689
+      rowCount: 1
+      locations:
+        lineNumbers: A=27
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/gopkg.in.yaml.model.yml
+      index: 0
+      firstRowId: 1690
+      rowCount: 9
+      locations:
+        lineNumbers: A=6+1*8
+        columnNumbers: A=9*9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/gorm.io.gorm.model.yml
+      index: 0
+      firstRowId: 1699
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/gorm.io.gorm.model.yml
+      index: 1
+      firstRowId: 1702
+      rowCount: 15
+      locations:
+        lineNumbers: A=13+1*14
+        columnNumbers: A=9*15
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/gorm.io.gorm.model.yml
+      index: 2
+      firstRowId: 1717
+      rowCount: 13
+      locations:
+        lineNumbers: A=32+1*12
+        columnNumbers: A=9*13
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/gorm.io.gorm.model.yml
+      index: 3
+      firstRowId: 1730
+      rowCount: 1
+      locations:
+        lineNumbers: A=49
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/html.model.yml
+      index: 0
+      firstRowId: 1731
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/html.template.model.yml
+      index: 0
+      firstRowId: 1733
+      rowCount: 6
+      locations:
+        lineNumbers: A=6+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/io.fs.model.yml
+      index: 0
+      firstRowId: 1739
+      rowCount: 13
+      locations:
+        lineNumbers: A=6+1*12
+        columnNumbers: A=9*13
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/io.fs.model.yml
+      index: 1
+      firstRowId: 1752
+      rowCount: 3
+      locations:
+        lineNumbers: A=23+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/io.ioutil.model.yml
+      index: 0
+      firstRowId: 1755
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/io.ioutil.model.yml
+      index: 1
+      firstRowId: 1760
+      rowCount: 2
+      locations:
+        lineNumbers: A=15+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/io.ioutil.model.yml
+      index: 2
+      firstRowId: 1762
+      rowCount: 1
+      locations:
+        lineNumbers: A=21
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/io.model.yml
+      index: 0
+      firstRowId: 1763
+      rowCount: 19
+      locations:
+        lineNumbers: A=6+1*18
+        columnNumbers: A=9*19
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/k8s.io.api.core.model.yml
+      index: 0
+      firstRowId: 1782
+      rowCount: 10
+      locations:
+        lineNumbers: A=6+1*9
+        columnNumbers: A=9*10
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/k8s.io.apimachinery.pkg.runtime.model.yml
+      index: 0
+      firstRowId: 1792
+      rowCount: 47
+      locations:
+        lineNumbers: A=6+1*46
+        columnNumbers: A=9*47
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/log.model.yml
+      index: 0
+      firstRowId: 1839
+      rowCount: 20
+      locations:
+        lineNumbers: A=6+1*19
+        columnNumbers: A=9*20
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/log.model.yml
+      index: 1
+      firstRowId: 1859
+      rowCount: 3
+      locations:
+        lineNumbers: A=30+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/math.big.model.yml
+      index: 0
+      firstRowId: 1862
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/mime.model.yml
+      index: 0
+      firstRowId: 1863
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/mime.multipart.model.yml
+      index: 0
+      firstRowId: 1868
+      rowCount: 8
+      locations:
+        lineNumbers: A=6+1*7
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/mime.quotedprintable.model.yml
+      index: 0
+      firstRowId: 1876
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/net.http.httputil.model.yml
+      index: 0
+      firstRowId: 1877
+      rowCount: 10
+      locations:
+        lineNumbers: A=6+1*9
+        columnNumbers: A=9*10
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/net.http.model.yml
+      index: 0
+      firstRowId: 1887
+      rowCount: 2
+      locations:
+        lineNumbers: A=7+2
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/net.http.model.yml
+      index: 1
+      firstRowId: 1889
+      rowCount: 22
+      locations:
+        lineNumbers: A=14+1*21
+        columnNumbers: A=9*22
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/net.http.model.yml
+      index: 2
+      firstRowId: 1911
+      rowCount: 16
+      locations:
+        lineNumbers: A=40+1*15
+        columnNumbers: A=9*16
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/net.mail.model.yml
+      index: 0
+      firstRowId: 1927
+      rowCount: 6
+      locations:
+        lineNumbers: A=6+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/net.model.yml
+      index: 0
+      firstRowId: 1933
+      rowCount: 20
+      locations:
+        lineNumbers: A=6+1*19
+        columnNumbers: A=9*20
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/net.textproto.model.yml
+      index: 0
+      firstRowId: 1953
+      rowCount: 19
+      locations:
+        lineNumbers: A=6+1*18
+        columnNumbers: A=9*19
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/net.url.model.yml
+      index: 0
+      firstRowId: 1972
+      rowCount: 23
+      locations:
+        lineNumbers: A=6+1*22
+        columnNumbers: A=9*23
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/nhooyr.io.websocket.model.yml
+      index: 0
+      firstRowId: 1995
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/os.exec.model.yml
+      index: 0
+      firstRowId: 1997
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/os.model.yml
+      index: 0
+      firstRowId: 1999
+      rowCount: 27
+      locations:
+        lineNumbers: A=7+1*25+2
+        columnNumbers: A=9*27
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/os.model.yml
+      index: 1
+      firstRowId: 2026
+      rowCount: 6
+      locations:
+        lineNumbers: A=39+1*5
+        columnNumbers: A=9*6
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/os.model.yml
+      index: 2
+      firstRowId: 2032
+      rowCount: 12
+      locations:
+        lineNumbers: A=49+1*11
+        columnNumbers: A=9*12
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/path.filepath.model.yml
+      index: 0
+      firstRowId: 2044
+      rowCount: 13
+      locations:
+        lineNumbers: A=6+1*12
+        columnNumbers: A=9*13
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/path.model.yml
+      index: 0
+      firstRowId: 2057
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/reflect.model.yml
+      index: 0
+      firstRowId: 2062
+      rowCount: 37
+      locations:
+        lineNumbers: A=6+1*36
+        columnNumbers: A=9*37
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/regexp.model.yml
+      index: 0
+      firstRowId: 2099
+      rowCount: 10
+      locations:
+        lineNumbers: A=6+1*9
+        columnNumbers: A=9*10
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/regexp.model.yml
+      index: 1
+      firstRowId: 2109
+      rowCount: 20
+      locations:
+        lineNumbers: A=20+1*19
+        columnNumbers: A=9*20
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/slices.model.yml
+      index: 0
+      firstRowId: 2129
+      rowCount: 17
+      locations:
+        lineNumbers: A=10+1+2+1*14
+        columnNumbers: A=9*17
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/sort.model.yml
+      index: 0
+      firstRowId: 2146
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/strconv.model.yml
+      index: 0
+      firstRowId: 2147
+      rowCount: 9
+      locations:
+        lineNumbers: A=6+1*8
+        columnNumbers: A=9*9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/strings.model.yml
+      index: 0
+      firstRowId: 2156
+      rowCount: 34
+      locations:
+        lineNumbers: A=6+1*33
+        columnNumbers: A=9*34
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/sync.atomic.model.yml
+      index: 0
+      firstRowId: 2190
+      rowCount: 24
+      locations:
+        lineNumbers: A=6+1*23
+        columnNumbers: A=9*24
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/sync.model.yml
+      index: 0
+      firstRowId: 2214
+      rowCount: 10
+      locations:
+        lineNumbers: A=6+1*9
+        columnNumbers: A=9*10
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/syscall.model.yml
+      index: 0
+      firstRowId: 2224
+      rowCount: 5
+      locations:
+        lineNumbers: A=6+1*4
+        columnNumbers: A=9*5
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/syscall.model.yml
+      index: 1
+      firstRowId: 2229
+      rowCount: 8
+      locations:
+        lineNumbers: A=15+1*7
+        columnNumbers: A=9*8
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/syscall.model.yml
+      index: 2
+      firstRowId: 2237
+      rowCount: 2
+      locations:
+        lineNumbers: A=27+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/text.scanner.model.yml
+      index: 0
+      firstRowId: 2239
+      rowCount: 3
+      locations:
+        lineNumbers: A=6+1*2
+        columnNumbers: A=9*3
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/text.tabwriter.model.yml
+      index: 0
+      firstRowId: 2242
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/text.template.model.yml
+      index: 0
+      firstRowId: 2243
+      rowCount: 4
+      locations:
+        lineNumbers: A=6+1*3
+        columnNumbers: A=9*4
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/weak.model.yml
+      index: 0
+      firstRowId: 2247
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/xorm.io.xorm.model.yml
+      index: 0
+      firstRowId: 2249
+      rowCount: 2
+      locations:
+        lineNumbers: A=6+1
+        columnNumbers: A=9*2
+     -
+      pack: codeql/go-all#1
+      relativePath: ext/xorm.io.xorm.model.yml
+      index: 1
+      firstRowId: 2251
+      rowCount: 34
+      locations:
+        lineNumbers: A=12+1+2+1*6+2+1*9+2+1*6+2+1*7
+        columnNumbers: A=9*34
+     -
+      pack: codeql/threat-models#2
+      relativePath: ext/supported-threat-models.model.yml
+      index: 0
+      firstRowId: 2285
+      rowCount: 1
+      locations:
+        lineNumbers: A=6
+        columnNumbers: A=9
+     -
+      pack: codeql/threat-models#2
+      relativePath: ext/threat-model-grouping.model.yml
+      index: 0
+      firstRowId: 2286
+      rowCount: 15
+      locations:
+        lineNumbers: A=8+3+1+3+1*5+3+1+5+1*3
+        columnNumbers: A=9*15
+  codeql/util#3:
+    name: codeql/util
+    version: 2.0.20
+    isLibrary: true
+    isExtensionPack: false
+    localPath: file:///Users/hasanbasri/.codeql/packages/codeql/go-queries/1.4.7/.codeql/libraries/codeql/util/2.0.20/
+    localPackDefinitionFile: file:///Users/hasanbasri/.codeql/packages/codeql/go-queries/1.4.7/.codeql/libraries/codeql/util/2.0.20/qlpack.yml
+    headSha: aa3000df1310b332ba1c84afec3bacb0aeb4dbbd
+    runDataExtensions: []
+  codeql/go-all#1:
+    name: codeql/go-all
+    version: 5.0.0
+    isLibrary: true
+    isExtensionPack: false
+    localPath: file:///Users/hasanbasri/.codeql/packages/codeql/go-queries/1.4.7/.codeql/libraries/codeql/go-all/5.0.0/
+    localPackDefinitionFile: file:///Users/hasanbasri/.codeql/packages/codeql/go-queries/1.4.7/.codeql/libraries/codeql/go-all/5.0.0/qlpack.yml
+    headSha: aa3000df1310b332ba1c84afec3bacb0aeb4dbbd
+    runDataExtensions: []

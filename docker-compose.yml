@@ -1,0 +1,23 @@
+version: "3.9"
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: bankdb
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  app:
+    build: .
+    depends_on:
+      - mysql
+    environment:
+      DB_USER: root
+      DB_PASS: root
+      DB_HOST: mysql
+      DB_NAME: bankdb
+    ports:
+      - "8090:8080"
