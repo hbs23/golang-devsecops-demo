@@ -173,7 +173,7 @@ pipeline {
             # 3) Tunggu health ready (maks 30x, 2 detik)
             ok=0
             for i in $(seq 1 30); do
-                if curl -sf http://127.0.0.1:9000/health >/dev/null; then
+                if curl -sf http://127.0.0.1:9000/ping >/dev/null; then
                 echo "App healthy"
                 ok=1
                 break
