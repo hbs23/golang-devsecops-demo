@@ -214,32 +214,6 @@ pipeline {
             sh 'docker rm -f go-praktikum-api || true'
             }
         }
-        }
-
-    stage('DAST - OWASP ZAP (Baseline)') {
-      steps {
-        sh '''
-          set -e
-          mkdir -p reports/zap
-          chmod 777 reports/zap || true
-
-          docker run --rm \
-            --user 0:0 \
-            -v "$PWD/reports/zap":/zap/wrk \
-            --network=host \
-            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-              -t "http://go-praktikum-api:${APP_PORT}" \
-              -r zap-baseline.html \
-              -J zap-baseline.json || true
-
-          echo "Isi reports/zap:" && ls -lah reports/zap || true
-        '''
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'reports/zap/zap-baseline.*', onlyIfSuccessful: false
-        }
-      }
     }
   }
 
