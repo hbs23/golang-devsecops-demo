@@ -56,18 +56,20 @@ pipeline {
         }
     }
 
-    stage('SAST - Semgrep (PR Fast)') {
-      steps {
-        sh """
-          docker run --rm -v \$PWD:/src returntocorp/semgrep:latest \
-            semgrep --config p/owasp-top-ten --config p/golang --error --json --output semgrep.json /src
-        """
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'semgrep.json', onlyIfSuccessful: false
+    stage('SAST - Semgrep') {
+        steps {
+            sh '''
+            mkdir -p reports
+            docker run --rm -v $PWD:/src -w /src returntocorp/semgrep:latest \
+                semgrep --config p/owasp-top-ten --config p/golang \
+                --error --json --output reports/semgrep.json .
+            '''
         }
-      }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/semgrep.json', allowEmptyArchive: true
+            }
+        }
     }
 
     stage('SAST - CodeQL (Security Extended)') {
