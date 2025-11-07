@@ -81,7 +81,7 @@ pipeline {
             SEARCH = '/var/jenkins_home/tools/codeql/current/qlpacks:' + "${env.HOME}/.codeql/packages"
         }
         steps {
-            withCredentials([string(credentialsId: 'github-hasan', variable: 'GITHUB_TOKEN')]) {
+            withCredentials([string(credentialsId: 'github-secret', variable: 'GITHUB_TOKEN')]) {
             sh '''
                 set -e
 
