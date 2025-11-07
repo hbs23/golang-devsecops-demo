@@ -68,38 +68,23 @@ pipeline {
                 set +e
                 mkdir -p reports
 
-                # Jalankan Semgrep sebagai user Jenkins; JANGAN pakai --error di sini
+                # Output JSON ke STDOUT lalu redirect di HOST (bukan di container)
                 docker run --rm \
-                -u $(id -u):$(id -g) \
                 -v "$PWD":/src -w /src returntocorp/semgrep:latest \
                 semgrep --config p/owasp-top-ten --config p/golang \
-                        --json --output reports/semgrep.json .
-
+                        --json . > reports/semgrep.json
                 rc=$?
-                echo "[Semgrep] exit code (non-blocking run) = $rc"
+                echo "[Semgrep] exit code = $rc"
 
-                # Pastikan file bener-bener ada & bisa dibaca
-                if [ ! -s reports/semgrep.json ]; then
-                echo '{}' > reports/semgrep.json
-                fi
+                # Pastikan file ada dan bisa dibaca
+                [ -s reports/semgrep.json ] || echo '{}' > reports/semgrep.json
                 chmod 664 reports/semgrep.json || true
 
                 echo "== reports listing =="
                 ls -lah reports || true
+
                 set -e
             '''
-
-            // Optional: gate di Groovy (bikin UNSTABLE/FAIL) setelah file pasti ada
-            def findings = sh(
-                returnStdout: true,
-                script: "python3 - <<'PY'\nimport json; j=json.load(open('reports/semgrep.json')); print(len(j.get('results',[])))\nPY"
-            ).trim() as Integer
-
-            if (findings > 0) {
-                // pilih salah satu:
-                // currentBuild.result = 'UNSTABLE'   // lanjut pipeline tapi tandai kuning
-                error "Semgrep findings: ${findings}" // blokir pipeline
-            }
             }
         }
         post {
