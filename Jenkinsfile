@@ -9,10 +9,14 @@ pipeline {
 
   stages {
     stage('Prep workspace') {
-      steps {
-        sh 'chmod -R u+rwX . || true'
-        deleteDir()
-      }
+        steps {
+            sh '''
+            echo "🧹 Cleaning workspace..."
+            sudo rm -rf reports .trivycache || true
+            chmod -R u+rwX . || true
+            '''
+            deleteDir()
+        }
     }
 
     stage('Checkout') {
@@ -68,6 +72,7 @@ pipeline {
           mkdir -p reports
           docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest \
             semgrep --config p/owasp-top-ten --config p/golang \
+                    --exclude node_modules --exclude reports --exclude .trivycache \
                     --json . > reports/semgrep.json
           python3 - <<'PY'
 import json, sys
