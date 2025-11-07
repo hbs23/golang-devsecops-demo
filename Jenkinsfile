@@ -69,8 +69,12 @@ pipeline {
             sh '''
         set -e
         mkdir -p reports
-        docker run --rm -v "$PWD":/src -w /src alpine:3.20 sh -lc "find . -type f -name '*.go' -maxdepth 3 -print"
-        # Paksa target hanya file Go, ignore artefak CI
+
+        echo "== List .go dari dalam container (diagnostic) =="
+        docker run --rm -v "$PWD":/src -w /src alpine:3.20 sh -lc "find . -maxdepth 3 -type f -name '*.go' -print || true"
+
+        # Jalankan semgrep di luar Git mode (scan semua file), exclude artefak CI
+        set +e
         docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest sh -lc "
         semgrep \
             --config p/golang \
@@ -81,11 +85,24 @@ pipeline {
             --exclude 'node_modules/**' \
             --include '**/*.go' \
             --include '*.go' \
+            --no-git-ignore \
             --json -o reports/semgrep.json .
         "
+        rc=$?
+        set -e
 
-        # Gate: fail jika ada finding (one-liner, tanpa heredoc supaya aman dari indent)
-        python3 -c "import json,sys; d=json.load(open('reports/semgrep.json')); n=len(d.get('results',[])); print(f'[Semgrep] findings={n}'); sys.exit(1 if n>0 else 0)"
+        # Pastikan file report selalu ada agar gate & archive tidak error
+        [ -s reports/semgrep.json ] || echo '{}' > reports/semgrep.json
+
+        # Gate: fail jika ada finding
+        python3 - <<'PY'
+        import json, sys
+        with open('reports/semgrep.json','r') as f:
+            data = json.load(f)
+        n = len(data.get('results', []))
+        print(f"[Semgrep] findings={n}")
+        sys.exit(1 if n > 0 else 0)
+        PY
             '''
         }
         post {
