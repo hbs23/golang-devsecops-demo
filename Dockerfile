@@ -12,5 +12,5 @@ FROM alpine:3.20
 WORKDIR /app
 RUN apk add --no-cache ca-certificates bash curl
 COPY --from=build /app/app /app/app
-EXPOSE 8080
+EXPOSE 9000
 CMD ["/app/app"]

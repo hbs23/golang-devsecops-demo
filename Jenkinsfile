@@ -4,9 +4,7 @@ pipeline {
   environment {
     APP_NAME = "go-praktikum-api"
     IMAGE_TAG = "${APP_NAME}:${env.BUILD_NUMBER}"
-    # Sesuaikan port app kamu saat run test/DAST
     APP_PORT = "8090"
-    # Versi tools
     CODEQL_VERSION = "v2.18.4" // contoh; sesuaikan
   }
 

@@ -80,7 +80,7 @@ func main() {
 	r.GET("/redirect", openRedirect)
 	r.GET("/secret", leakEnv)
 
-	addr := ":8080"
+	addr := ":9000"
 	log.Printf("Listening at %s", addr)
 	log.Fatal(r.Run(addr))
 }
