@@ -170,25 +170,39 @@ pipeline {
             docker rm -f go-praktikum-api || true
             docker run -d --name go-praktikum-api --network ci-net -p 9000:9000 go-praktikum-api:46
 
-            # 3) Tunggu health ready (dari host masih bisa curl ke 127.0.0.1:9000)
+            # 3) Tunggu health ready (maks 30x, 2 detik)
+            ok=0
             for i in $(seq 1 30); do
                 if curl -sf http://127.0.0.1:9000/health >/dev/null; then
                 echo "App healthy"
+                ok=1
                 break
                 fi
                 sleep 2
             done
+            if [ "$ok" -ne 1 ]; then
+                echo "ERROR: App belum healthy setelah 60 detik" >&2
+                docker logs --tail=200 go-praktikum-api || true
+                exit 1
+            fi
 
+            # 4) Siapkan folder report
             mkdir -p reports/zap
-            chmod 777 reports/zap
+            chmod 777 reports/zap || true
+            rm -f reports/zap/zap.yaml || true
 
-            # 4) Jalankan ZAP di network yang sama, targetkan NAMA container
+            # 5) Jalankan ZAP di network yang sama, target NAMA container
             docker run --rm \
+                --user 0:0 \
                 --network ci-net \
                 -v "$PWD/reports/zap":/zap/wrk \
                 -w /zap/wrk \
                 ghcr.io/zaproxy/zaproxy:stable \
-                zap-baseline.py -t http://go-praktikum-api:9000 -r zap-baseline.html -J zap-baseline.json || true
+                zap-baseline.py \
+                -t http://go-praktikum-api:9000 \
+                -r zap-baseline.html \
+                -J zap-baseline.json \
+                -m 5 || true   # batasi durasi baseline 5 menit (opsional)
 
             echo "Isi reports/zap:"
             ls -lah reports/zap || true
@@ -200,7 +214,7 @@ pipeline {
             sh 'docker rm -f go-praktikum-api || true'
             }
         }
-    }
+        }
 
     stage('DAST - OWASP ZAP (Baseline)') {
       steps {
