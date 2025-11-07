@@ -113,8 +113,8 @@ pipeline {
                 # 3) Paksa download pack bahasa & queries Go (dengan token GitHub)
                 #    Note: codeql/go adalah pack publik yang mengandung extractor
                 echo "⬇️  Download packs codeql/go & codeql/go-queries…"
-                GITHUB_TOKEN="$GITHUB_TOKEN" "$BUNDLE/codeql" pack download codeql/go --search-path="$SEARCH" --verbosity=debug
-                GITHUB_TOKEN="$GITHUB_TOKEN" "$BUNDLE/codeql" pack download codeql/go-queries --search-path="$SEARCH" --verbosity=debug
+                GITHUB_TOKEN="$GITHUB_TOKEN" "$BUNDLE/codeql" pack download codeql/go --search-path="$SEARCH" --verbosity=progres+++
+                GITHUB_TOKEN="$GITHUB_TOKEN" "$BUNDLE/codeql" pack download codeql/go-queries --search-path="$SEARCH" --verbosity=progres+++
 
                 echo "🔎 Packs terlihat (sesudah):"
                 "$BUNDLE/codeql" resolve qlpacks --search-path="$SEARCH"
