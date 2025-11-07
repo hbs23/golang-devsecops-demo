@@ -78,11 +78,12 @@ pipeline {
             set -e
             TOOLS=/var/jenkins_home/tools/codeql
             VER=2.18.4
+            SEARCH_PATH="$TOOLS/current"   # beritahu codeql lokasi bundle utk extractor & packs
 
             mkdir -p "$TOOLS"
             cd "$TOOLS"
 
-            # Pastikan pakai BUNDLE (bukan CLI)
+            # Pastikan pakai CodeQL BUNDLE (punya extractor)
             if [ ! -x current/codeql ]; then
                 echo "📦 Download CodeQL BUNDLE $VER…"
                 curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
@@ -95,31 +96,27 @@ pipeline {
                 echo "✅ CodeQL bundle sudah ada."
             fi
 
-            # ---- pastikan extractor Go tersedia ----
-            echo "🔎 Cek extractor..."
-            if ! "$TOOLS/current/codeql" resolve languages | grep -q "^go$"; then
-                echo "⬇️  Download packs Go (extractor + libraries + queries)..."
-                "$TOOLS/current/codeql" pack download codeql/go-extractor
-                "$TOOLS/current/codeql" pack download codeql/go-all
-                "$TOOLS/current/codeql" pack download codeql/go-queries
-                # verifikasi lagi
-                "$TOOLS/current/codeql" resolve languages
-            fi
+            echo "🔎 Languages visible via bundle:"
+            "$TOOLS/current/codeql" resolve languages --search-path="$SEARCH_PATH" || true
 
             cd "$WORKSPACE"
             mkdir -p reports
 
-            # build DB (pakai Docker golang biar agent tak perlu Go)
+            # Create DB (pakai Docker golang utk build) + search-path ke bundle
             "$TOOLS/current/codeql" database create codeql-db-go \
                 --overwrite \
-                --language=go --source-root . \
+                --language=go \
+                --source-root . \
+                --search-path="$SEARCH_PATH" \
                 --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
 
-            # (opsional) pastikan query packs ada
-            "$TOOLS/current/codeql" pack download codeql/go-queries
+            # (opsional) download query pack tambahan — tetap gunakan search-path bundle
+            "$TOOLS/current/codeql" pack download codeql/go-queries --search-path="$SEARCH_PATH" || true
 
+            # Analyze (SARIF 2.1.0)
             "$TOOLS/current/codeql" database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
+                --search-path="$SEARCH_PATH" \
                 --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0 || true
             '''
         }
