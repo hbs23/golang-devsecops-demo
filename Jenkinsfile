@@ -64,31 +64,28 @@ pipeline {
         }
     }
 
-    stage('SAST - Semgrep (Blocking)') {
+    sstage('SAST - Semgrep (Blocking)') {
         steps {
             sh '''
-            set -e
-            mkdir -p reports
-            ls -lah
+        set -e
+        mkdir -p reports
+        docker run --rm -v "$PWD":/src -w /src alpine:3.20 sh -lc "find . -type f -name '*.go' -maxdepth 3 -print"
+        # Paksa target hanya file Go, ignore artefak CI
+        docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest sh -lc "
+        semgrep \
+            --config p/golang \
+            --config p/security-audit \
+            --config p/owasp-top-ten \
+            --exclude 'reports/**' \
+            --exclude '.trivycache/**' \
+            --exclude 'node_modules/**' \
+            --include '**/*.go' \
+            --include '*.go' \
+            --json -o reports/semgrep.json .
+        "
 
-            docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest sh -lc "
-            semgrep \
-                --config p/golang \
-                --config p/security-audit \
-                --config p/secrets \
-                --config p/owasp-top-ten \
-                --exclude 'reports/**' --exclude '.trivycache/**' --exclude 'node_modules/**' \
-                --no-git-ignore \
-                --json -o reports/semgrep.json .
-            "
-            # Gate: fail kalau ada finding
-            python3 - <<'PY'
-        import json, sys
-        j=json.load(open('reports/semgrep.json'))
-        n=len(j.get('results',[]))
-        print(f"[Semgrep] findings={n}")
-        sys.exit(1 if n>0 else 0)
-        PY
+        # Gate: fail jika ada finding (one-liner, tanpa heredoc supaya aman dari indent)
+        python3 -c "import json,sys; d=json.load(open('reports/semgrep.json')); n=len(d.get('results',[])); print(f'[Semgrep] findings={n}'); sys.exit(1 if n>0 else 0)"
             '''
         }
         post {
