@@ -27,7 +27,7 @@ pipeline {
       steps {
         sh """
           docker run --rm -v \$PWD:/work -w /work golang:1.22-alpine \
-            sh -lc 'apk add --no-cache build-base git && go test ./...'
+            sh -c 'apk add --no-cache build-base git && go test ./...'
         """
       }
     }
