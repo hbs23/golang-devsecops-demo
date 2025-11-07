@@ -71,11 +71,11 @@ pipeline {
         mkdir -p reports
 
         echo "== List .go dari dalam container (diagnostic) =="
-        docker run --rm -v "$PWD":/src -w /src alpine:3.20 sh -lc "find . -maxdepth 3 -type f -name '*.go' -print || true"
+        docker run --rm -v "${WORKSPACE}":/src -w /src alpine:3.20 sh -lc "find . -maxdepth 3 -type f -name '*.go' -print || true"
 
         # Jalankan semgrep di luar Git mode (scan semua file), exclude artefak CI
         set +e
-        docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest sh -lc "
+        docker run --rm -v "${WORKSPACE}":/src -w /src returntocorp/semgrep:latest sh -lc "
         semgrep \
             --config p/golang \
             --config p/security-audit \
