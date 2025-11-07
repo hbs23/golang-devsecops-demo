@@ -82,33 +82,41 @@ pipeline {
             mkdir -p "$TOOLS"
             cd "$TOOLS"
 
-            # install BUNDLE (bukan CLI zip)
+            # Pastikan kita pakai BUNDLE (punya extractor), bukan CLI zip
             if [ ! -x current/codeql/codeql ]; then
                 echo "📦 Download CodeQL BUNDLE $VER…"
                 curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
                 rm -rf "codeql-${VER}" tmp && mkdir -p tmp
                 tar -xzf codeql-bundle.tgz -C tmp
-                # hasil ekstrak adalah folder 'codeql'
+                # hasil ekstrak: tmp/codeql/...
                 mv tmp/codeql "codeql-${VER}"
                 ln -sfn "codeql-${VER}" current
                 rm -rf tmp codeql-bundle.tgz
-            else
-                echo "✅ CodeQL bundle sudah ada."
             fi
 
+            # DIAGNOSTIC: pastikan biner ada & executable
+            echo "🔍 List:"
+            ls -l "$TOOLS/current/codeql" || true
+            echo "🔍 File info:"
+            file "$TOOLS/current/codeql/codeql" || true
+
+            # Kadang permission hilang, paksa executable
+            chmod +x "$TOOLS/current/codeql/codeql"
+
+            # Quick run untuk memastikan loader OK
+            "$TOOLS/current/codeql/codeql" version
+
+            # --- create DB ---
             cd "$WORKSPACE"
             mkdir -p reports
 
-            # create database (pakai Docker untuk build go)
             "$TOOLS/current/codeql/codeql" database create codeql-db-go \
                 --overwrite \
                 --language=go --source-root . \
                 --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
 
-            # download query packs (cache di ~/.codeql/packages)
             "$TOOLS/current/codeql/codeql" pack download codeql/go-queries
 
-            # analyze
             "$TOOLS/current/codeql/codeql" database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
                 --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0 || true
