@@ -14,6 +14,7 @@ pipeline {
         deleteDir()
       }
     }
+
     stage('Checkout') {
       steps {
         checkout scm
@@ -22,35 +23,27 @@ pipeline {
 
     stage('Build Image') {
       steps {
-        sh """
-          docker build -t ${IMAGE_TAG} .
-        """
+        sh '''
+          set -e
+          docker build --label commit=${GIT_COMMIT} --label build=${BUILD_NUMBER} -t ${IMAGE_TAG} .
+        '''
       }
     }
 
     stage('Unit Test (Go)') {
       steps {
         sh '''
-          docker run --rm -v $PWD:/work -w /work golang:1.22-alpine sh -c "
+          docker run --rm -u $(id -u):$(id -g) -v "$PWD":/work -w /work golang:1.22-alpine sh -c "
             set -e
-            apk add --no-cache git ca-certificates >/dev/null
+            apk add --no-cache git ca-certificates build-base >/dev/null
             go version
             [ -f go.mod ] || go mod init github.com/example/golang-banking-gin-alpine
             go mod tidy || true
-
-            echo '🔎 Cari paket Go...'
-            PKGS=\$(go list ./... 2>/dev/null || true)
-
-            if [ -z \"\$PKGS\" ]; then
-              echo 'ℹ️  Tidak ada paket Go ditemukan. Lewati unit test.'
-              exit 0
+            PKGS=$(go list ./... 2>/dev/null || true)
+            if [ -z \\"$PKGS\\" ]; then
+              echo 'No Go packages found. Skipping tests.'; exit 0
             fi
-
-            echo '📦 Paket:'
-            echo \"\$PKGS\" | tr ' ' '\\n'
-
-            echo '🚀 Jalankan unit test...'
-            go test -v -count=1 -race -coverprofile=coverage.out \$PKGS
+            go test -v -count=1 -race -coverprofile=coverage.out $PKGS
           "
         '''
       }
@@ -60,75 +53,73 @@ pipeline {
             if (fileExists('coverage.out')) {
               archiveArtifacts artifacts: 'coverage.out', fingerprint: true
             } else {
-              echo 'No coverage.out generated (no Go packages / tests skipped).'
+              echo 'No coverage.out generated.'
             }
           }
         }
       }
     }
 
-    stage('SAST - Semgrep') {
-        steps {
-            script {
-            sh '''
-                set +e
-                mkdir -p reports
-
-                # Output JSON ke STDOUT lalu redirect di HOST (bukan di container)
-                docker run --rm \
-                -v "$PWD":/src -w /src returntocorp/semgrep:latest \
-                semgrep --config p/owasp-top-ten --config p/golang \
-                        --json . > reports/semgrep.json
-                rc=$?
-                echo "[Semgrep] exit code = $rc"
-
-                # Pastikan file ada dan bisa dibaca
-                [ -s reports/semgrep.json ] || echo '{}' > reports/semgrep.json
-                chmod 664 reports/semgrep.json || true
-
-                echo "== reports listing =="
-                ls -lah reports || true
-
-                set -e
-            '''
-            }
-        }
-        post {
-            always {
-            archiveArtifacts artifacts: 'reports/semgrep.json', onlyIfSuccessful: false, allowEmptyArchive: false
-            }
-        }
-    }
-
-    stage('SCA - Trivy (Repo deps)') {
-        steps {
-            sh '''
-            set -e
-            mkdir -p reports .trivycache
-            docker run --rm \
-                -v "$PWD":/work -w /work \
-                -v "$PWD/.trivycache":/root/.cache/trivy \
-                aquasec/trivy:latest fs . \
-                --scanners vuln \
-                --severity CRITICAL,HIGH \
-                --format sarif \
-                > reports/trivy-fs.sarif
-            '''
-        }
-        post {
-            always {
-            archiveArtifacts artifacts: 'reports/trivy-fs.sarif', onlyIfSuccessful: false
-            }
-        }
-    }
-
-    stage('SCA - Trivy (Image)') {
+    // ===== SAST (Blocking) =====
+    stage('SAST - Semgrep (Blocking)') {
       steps {
         sh '''
           set -e
-          mkdir -p reports .trivycache
+          mkdir -p reports
+          docker run --rm -v "$PWD":/src -w /src returntocorp/semgrep:latest \
+            semgrep --config p/owasp-top-ten --config p/golang \
+                    --json . > reports/semgrep.json
+          python3 - <<'PY'
+import json, sys
+j=json.load(open('reports/semgrep.json'))
+n=len(j.get('results',[]))
+print(f"[Semgrep] findings={n}")
+sys.exit(1 if n>0 else 0)
+PY
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'reports/semgrep.json', onlyIfSuccessful: false
+        }
+      }
+    }
 
-          docker run --rm \
+    // ===== SCA FS (Blocking) =====
+    stage('SCA - Trivy (Repo deps) - Blocking') {
+      steps {
+        sh '''
+          set +e
+          mkdir -p reports .trivycache
+          docker run --rm -u $(id -u):$(id -g) \
+            -v "$PWD":/work -w /work \
+            -v "$PWD/.trivycache":/root/.cache/trivy \
+            aquasec/trivy:latest fs . \
+              --scanners vuln \
+              --severity CRITICAL,HIGH \
+              --format sarif \
+              --exit-code 1 \
+              > reports/trivy-fs.sarif
+          rc=$?
+          echo "[Trivy FS] exit code=$rc"
+          set -e
+          exit $rc
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'reports/trivy-fs.sarif', onlyIfSuccessful: false
+        }
+      }
+    }
+
+    // ===== SCA Image (Blocking) =====
+    stage('SCA - Trivy (Image) - Blocking') {
+      steps {
+        sh '''
+          set +e
+          mkdir -p reports .trivycache
+          docker run --rm -u $(id -u):$(id -g) \
             -v "$PWD":/work -w /work \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD/.trivycache":/root/.cache/trivy \
@@ -137,12 +128,14 @@ pipeline {
               --pkg-types os,library \
               --ignore-unfixed \
               --scanners vuln \
-              --exit-code 0 \
               --format sarif \
+              --exit-code 1 \
               --quiet \
               > reports/trivy-image.sarif
-
-          echo "Isi folder reports:" && ls -lah reports || true
+          rc=$?
+          echo "[Trivy Image] exit code=$rc"
+          set -e
+          exit $rc
         '''
       }
       post {
@@ -152,13 +145,13 @@ pipeline {
       }
     }
 
+    // ===== SBOM (Non-blocking, tetap diarsip) =====
     stage('SBOM - Trivy (CycloneDX)') {
       steps {
         sh '''
           set -e
           mkdir -p reports .trivycache
-
-          docker run --rm \
+          docker run --rm -u $(id -u):$(id -g) \
             -v "$PWD":/work -w /work \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$PWD/.trivycache":/root/.cache/trivy \
@@ -169,8 +162,7 @@ pipeline {
               --scanners vuln,license \
               --quiet \
               > reports/sbom.cdx.json
-
-          echo "Isi folder reports:" && ls -lah reports || true
+          ls -lah reports || true
         '''
       }
       post {
@@ -180,78 +172,70 @@ pipeline {
       }
     }
 
-    stage('Run app & DAST') {
-        steps {
-            sh '''
-            set -e
+    // ===== DAST (Blocking on WARN/FAIL) =====
+    stage('Run app & DAST (ZAP Baseline - Blocking)') {
+      steps {
+        sh '''
+          set -e
+          docker network inspect ci-net >/dev/null 2>&1 || docker network create ci-net
+          docker rm -f ${APP_NAME} >/dev/null 2>&1 || true
+          docker run -d --name ${APP_NAME} --network ci-net -p ${APP_PORT}:${APP_PORT} ${IMAGE_TAG}
 
-            # 1) Network khusus CI (idempotent)
-            docker network inspect ci-net >/dev/null 2>&1 || docker network create ci-net
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -sf http://${APP_NAME}:${APP_PORT}/ping >/dev/null; then echo "App healthy"; ok=1; break; fi
+            sleep 2
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "ERROR: App belum healthy setelah 60 detik" >&2
+            docker logs --tail=200 ${APP_NAME} || true
+            exit 1
+          fi
 
-            # 2) Start app di network yang sama
-            docker rm -f go-praktikum-api >/dev/null 2>&1 || true
-            docker run -d --name go-praktikum-api --network ci-net -p 9000:9000 go-praktikum-api:46
+          mkdir -p reports/zap
 
-            # 3) Tunggu health ready (maks 30x, 2 detik)
-            ok=0
-            for i in $(seq 1 30); do
-                if curl -sf http://go-praktikum-api:9000/ping >/dev/null; then
-                echo "App healthy"
-                ok=1
-                break
-                fi
-                sleep 2
-            done
-            if [ "$ok" -ne 1 ]; then
-                echo "ERROR: App belum healthy setelah 60 detik" >&2
-                docker logs --tail=200 go-praktikum-api || true
-                exit 1
-            fi
+          cname=zapscan-$$
+          set +e
+          docker run --name "$cname" --network ci-net ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+              -t http://${APP_NAME}:${APP_PORT} \
+              -r zap-baseline.html \
+              -J zap-baseline.json \
+              -m 5 \
+            | tee reports/zap/zap-baseline.txt
+          zap_rc=$?
+          echo "[ZAP] exit code(baseline)=$zap_rc"
+          set -e
 
-            # 4) Siapkan folder report
-            mkdir -p reports/zap
-            chmod 777 reports/zap || true
+          docker cp "$cname":/zap/wrk/. reports/zap/ >/dev/null 2>&1 || true
+          docker rm -f "$cname" >/dev/null 2>&1 || true
 
-            # 5) Jalankan ZAP (tanpa bind mount), simpan output di /zap/wrk di dalam container
-            cname=zapscan-$$
-            set +e
-            docker run --name "$cname" \
-                --network ci-net \
-                ghcr.io/zaproxy/zaproxy:stable \
-                zap-baseline.py \
-                -t http://go-praktikum-api:9000 \
-                -r /zap/wrk/zap-baseline.html \
-                -J /zap/wrk/zap-baseline.json \
-                -m 5 \
-                | tee reports/zap/zap-baseline.txt
-            rc=$?
-            echo "[ZAP] exit code = $rc"
-            set -e
+          [ -s reports/zap/zap-baseline.html ] || cp reports/zap/zap-baseline.txt reports/zap/zap-baseline.html
+          [ -s reports/zap/zap-baseline.json ] || echo '{}' > reports/zap/zap-baseline.json
 
-            # 6) Copy semua hasil dari /zap/wrk (dalam container) ke host
-            docker cp "$cname":/zap/wrk/. reports/zap/ >/dev/null 2>&1 || true
-            docker rm -f "$cname" >/dev/null 2>&1 || true
+          WARN=$(grep -Eo 'WARN-NEW: *[0-9]+' reports/zap/zap-baseline.txt | awk '{print $2+0}' || echo 0)
+          FAIL=$(grep -Eo 'FAIL-NEW: *[0-9]+' reports/zap/zap-baseline.txt | awk '{print $2+0}' || echo 0)
+          echo "[ZAP] WARN-NEW=$WARN FAIL-NEW=$FAIL"
 
-            # 7) Pastikan ada artefak minimal
-            [ -s reports/zap/zap-baseline.html ] || cp reports/zap/zap-baseline.txt reports/zap/zap-baseline.html
-            [ -s reports/zap/zap-baseline.json ] || echo '{}' > reports/zap/zap-baseline.json
+          # NOTE: kalau mau FAIL-only, ubah ke: if [ "${FAIL}" -gt 0 ]; then exit 1; fi
+          if [ "${FAIL}" -gt 0 ] || [ "${WARN}" -gt 0 ]; then
+            echo "[ZAP] Blocking: ditemukan issue WARN/FAIL"; exit 1
+          fi
 
-            echo "== Isi reports/zap =="
-            ls -lah reports/zap || true
-            '''
+          ls -lah reports/zap || true
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'reports/zap/**', onlyIfSuccessful: false
+          sh 'docker rm -f ${APP_NAME} || true'
         }
-        post {
-            always {
-            archiveArtifacts artifacts: 'reports/zap/**', allowEmptyArchive: false, onlyIfSuccessful: false
-            sh 'docker rm -f go-praktikum-api || true'
-            }
-        }
+      }
     }
   }
 
   post {
     always {
-      // Pastikan container app berhenti
       sh "docker ps -aq --filter 'name=${APP_NAME}' | xargs -r docker stop || true"
     }
   }
