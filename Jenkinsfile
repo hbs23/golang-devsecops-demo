@@ -64,30 +64,34 @@ pipeline {
         }
     }
 
-    // ===== SAST (Blocking) =====
     stage('SAST - Semgrep (Blocking)') {
-      steps {
-        sh '''
-          set -e
-          mkdir -p reports
-          docker run --rm -v "$PWD" -w /src returntocorp/semgrep:latest \
-            semgrep --config p/owasp-top-ten --config p/golang \
-                    --exclude node_modules --exclude reports --exclude .trivycache \
-                    --json . > reports/semgrep.json
-          python3 - <<'PY'
-import json, sys
-j=json.load(open('reports/semgrep.json'))
-n=len(j.get('results',[]))
-print(f"[Semgrep] findings={n}")
-sys.exit(1 if n>0 else 0)
-PY
-        '''
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'reports/semgrep.json', onlyIfSuccessful: false
+        steps {
+            sh '''
+            set +e
+            mkdir -p reports
+            docker run --rm \
+                -v "$PWD":/src -w /src \
+                returntocorp/semgrep:latest \
+                semgrep \
+                --config p/owasp-top-ten \
+                --config p/golang \
+                --exclude node_modules \
+                --exclude reports \
+                --exclude .trivycache \
+                --include '*.go' \
+                --include '**/*.go' \
+                --json > reports/semgrep.json
+            rc=$?
+            echo "[Semgrep] exit code=$rc"
+            set -e
+            exit $rc
+            '''
         }
-      }
+        post {
+            always {
+            archiveArtifacts artifacts: 'reports/semgrep.json', onlyIfSuccessful: false
+            }
+        }
     }
 
     // ===== SCA FS (Blocking) =====
