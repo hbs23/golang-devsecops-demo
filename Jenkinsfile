@@ -33,7 +33,7 @@ pipeline {
                     go version && \
                     if [ ! -f go.mod ]; then \
                         echo "go.mod belum ada — inisialisasi modul"; \
-                        go mod init github.com/<username>/<repo>; \
+                        go mod init github.com/example/golang-banking-gin-alpine \
                     fi && \
                     go mod tidy && \
                     echo "Jalankan unit test..." && \
