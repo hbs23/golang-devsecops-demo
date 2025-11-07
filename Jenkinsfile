@@ -31,33 +31,33 @@ pipeline {
     }
 
     stage('Unit Test (Go)') {
-      steps {
-        sh '''
-          docker run --rm -u $(id -u):$(id -g) -v "$PWD":/work -w /work golang:1.22-alpine sh -c "
-            set -e
-            apk add --no-cache git ca-certificates build-base >/dev/null
-            go version
-            [ -f go.mod ] || go mod init github.com/example/golang-banking-gin-alpine
-            go mod tidy || true
-            PKGS=$(go list ./... 2>/dev/null || true)
-            if [ -z \\"$PKGS\\" ]; then
-              echo 'No Go packages found. Skipping tests.'; exit 0
-            fi
-            go test -v -count=1 -race -coverprofile=coverage.out $PKGS
-          "
-        '''
-      }
-      post {
-        always {
-          script {
-            if (fileExists('coverage.out')) {
-              archiveArtifacts artifacts: 'coverage.out', fingerprint: true
-            } else {
-              echo 'No coverage.out generated.'
-            }
-          }
+        steps {
+            sh '''
+            docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "
+                set -e
+                apk add --no-cache git ca-certificates build-base >/dev/null
+                go version
+                [ -f go.mod ] || go mod init github.com/example/golang-banking-gin-alpine
+                go mod tidy || true
+                PKGS=$(go list ./... 2>/dev/null || true)
+                if [ -z \\"$PKGS\\" ]; then
+                echo 'No Go packages found. Skipping tests.'; exit 0
+                fi
+                go test -v -count=1 -race -coverprofile=coverage.out $PKGS
+            "
+            '''
         }
-      }
+        post {
+            always {
+            script {
+                if (fileExists('coverage.out')) {
+                archiveArtifacts artifacts: 'coverage.out', fingerprint: true
+                } else {
+                echo 'No coverage.out generated.'
+                }
+            }
+            }
+        }
     }
 
     // ===== SAST (Blocking) =====
