@@ -179,7 +179,7 @@ pipeline {
                     -v "$PWD":/work -w /work \
                     -v /var/run/docker.sock:/var/run/docker.sock \
                     -v "$PWD/.trivycache":/root/.cache/trivy \
-                    aquasec/trivy:latest image "go-praktikum-api:31" \
+                    aquasec/trivy:latest image ${IMAGE_TAG} \
                     --severity CRITICAL,HIGH \
                     --pkg-types os,library \
                     --ignore-unfixed \
@@ -268,7 +268,7 @@ pipeline {
         }
     }
   }
-
+}
   post {
     always {
       sh "docker ps -aq --filter 'name=${APP_NAME}' | xargs -r docker stop || true"
