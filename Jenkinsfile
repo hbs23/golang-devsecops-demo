@@ -78,14 +78,14 @@ pipeline {
             set -e
             TOOLS=/var/jenkins_home/tools/codeql
             VER=2.18.4
-            BUNDLE="$TOOLS/current"                 # berisi binary + packs bawaan bundle
-            PACKS="$HOME/.codeql/packages"          # lokasi cache packs yang diunduh
-            SEARCH_PATH="$BUNDLE:$PACKS"            # gabungkan keduanya
+            BUNDLE="$TOOLS/current"                 # folder bundle
+            PACKS="$HOME/.codeql/packages"          # cache packs yang diunduh
+            SEARCH_PATH="$BUNDLE/qlpacks:$PACKS"    # << kunci: pakai /qlpacks
 
             mkdir -p "$TOOLS" "$PACKS"
             cd "$TOOLS"
 
-            # 1) Pastikan pakai CodeQL BUNDLE (bukan CLI zip)
+            # Pastikan BUNDLE terpasang
             if [ ! -x "$BUNDLE/codeql" ]; then
                 echo "📦 Download CodeQL BUNDLE $VER…"
                 curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
@@ -98,23 +98,15 @@ pipeline {
                 echo "✅ CodeQL bundle sudah ada."
             fi
 
-            echo "🔎 Packs terlihat (sebelum download):"
+            echo "🔎 Packs terlihat:"
             "$BUNDLE/codeql" resolve qlpacks --search-path="$SEARCH_PATH" || true
-            echo "🔎 Languages terlihat (sebelum download):"
+            echo "🔎 Languages terlihat:"
             "$BUNDLE/codeql" resolve languages --search-path="$SEARCH_PATH" || true
-
-            # 2) Unduh packs publik (EKSTRA) → ini menambahkan extractor & queries Go ke cache lokal
-            echo "⬇️  Download public packs: codeql/go & codeql/go-queries…"
-            "$BUNDLE/codeql" pack download codeql/go --search-path="$SEARCH_PATH"
-            "$BUNDLE/codeql" pack download codeql/go-queries --search-path="$SEARCH_PATH"
-
-            echo "🔎 Languages terlihat (setelah download):"
-            "$BUNDLE/codeql" resolve languages --search-path="$SEARCH_PATH"
 
             cd "$WORKSPACE"
             mkdir -p reports
 
-            # 3) Buat database (build Go via Docker) + pakai SEARCH_PATH gabungan
+            # Buat database (build Go via Docker)
             "$BUNDLE/codeql" database create codeql-db-go \
                 --overwrite \
                 --language=go \
@@ -122,7 +114,10 @@ pipeline {
                 --search-path="$SEARCH_PATH" \
                 --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
 
-            # 4) Analisis (SARIF 2.1.0)
+            # (opsional) update query packs publik
+            "$BUNDLE/codeql" pack download codeql/go-queries --search-path="$SEARCH_PATH" || true
+
+            # Analyze → SARIF 2.1.0
             "$BUNDLE/codeql" database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
                 --search-path="$SEARCH_PATH" \
@@ -135,7 +130,7 @@ pipeline {
             }
         }
     }
-
+    
     stage('SCA - Trivy (Repo deps)') {
       steps {
         sh """
