@@ -26,21 +26,19 @@ pipeline {
     stage('Unit Test (Go)') {
         steps {
             sh """
-                docker run --rm \
-                    -v \$PWD:/work -w /work \
-                    golang:1.22-alpine \
-                    sh -c '
-                        apk add --no-cache git ca-certificates &&
-                        go version &&
-                        if [ ! -f go.mod ]; then
-                            echo "go.mod belum ada — inisialisasi modul"
-                            go mod init github.com/<username>/<repo>
-                        fi &&
-                        go mod tidy &&
-                        echo "Jalankan unit test..." &&
-                        go test -v ./...
-                    '
-             """
+            docker run --rm \
+                -v \$PWD:/work -w /work \
+                golang:1.22-alpine \
+                sh -c 'apk add --no-cache git ca-certificates && \
+                    go version && \
+                    if [ ! -f go.mod ]; then \
+                        echo "go.mod belum ada — inisialisasi modul"; \
+                        go mod init github.com/<username>/<repo>; \
+                    fi && \
+                    go mod tidy && \
+                    echo "Jalankan unit test..." && \
+                    go test -v ./..."'
+            """
         }
     }
 
