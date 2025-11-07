@@ -210,14 +210,15 @@ pipeline {
                 -v "$PWD":/work -w /work \
                 -v /var/run/docker.sock:/var/run/docker.sock \
                 -v "$PWD/.trivycache":/root/.cache/trivy \
-                aquasec/trivy:latest sbom \
-                --image "$IMAGE_TAG" \
+                aquasec/trivy:latest image "$IMAGE_TAG" \
                 --format cyclonedx \
-                --scanners vuln \
+                --pkg-types os,library \
+                --ignore-unfixed \
+                --scanners vuln,license \
+                --exit-code 0 \
                 --output /work/reports/sbom.cdx.json
 
-            echo "Isi folder reports:"
-            ls -lah reports || true
+            echo "Isi folder reports:" && ls -lah reports || true
             '''
         }
         post {
