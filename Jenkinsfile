@@ -78,13 +78,15 @@ pipeline {
             set -e
             TOOLS=/var/jenkins_home/tools/codeql
             VER=2.18.4
-            SEARCH_PATH="$TOOLS/current"   # beritahu codeql lokasi bundle utk extractor & packs
+            BUNDLE="$TOOLS/current"                 # berisi binary + packs bawaan bundle
+            PACKS="$HOME/.codeql/packages"          # lokasi cache packs yang diunduh
+            SEARCH_PATH="$BUNDLE:$PACKS"            # gabungkan keduanya
 
-            mkdir -p "$TOOLS"
+            mkdir -p "$TOOLS" "$PACKS"
             cd "$TOOLS"
 
-            # Pastikan pakai CodeQL BUNDLE (punya extractor)
-            if [ ! -x current/codeql ]; then
+            # 1) Pastikan pakai CodeQL BUNDLE (bukan CLI zip)
+            if [ ! -x "$BUNDLE/codeql" ]; then
                 echo "📦 Download CodeQL BUNDLE $VER…"
                 curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
                 rm -rf "codeql-${VER}" tmp && mkdir -p tmp
@@ -96,25 +98,32 @@ pipeline {
                 echo "✅ CodeQL bundle sudah ada."
             fi
 
-            echo "🔎 Languages visible via bundle:"
-            "$TOOLS/current/codeql" resolve languages --search-path="$SEARCH_PATH" || true
+            echo "🔎 Packs terlihat (sebelum download):"
+            "$BUNDLE/codeql" resolve qlpacks --search-path="$SEARCH_PATH" || true
+            echo "🔎 Languages terlihat (sebelum download):"
+            "$BUNDLE/codeql" resolve languages --search-path="$SEARCH_PATH" || true
+
+            # 2) Unduh packs publik (EKSTRA) → ini menambahkan extractor & queries Go ke cache lokal
+            echo "⬇️  Download public packs: codeql/go & codeql/go-queries…"
+            "$BUNDLE/codeql" pack download codeql/go --search-path="$SEARCH_PATH"
+            "$BUNDLE/codeql" pack download codeql/go-queries --search-path="$SEARCH_PATH"
+
+            echo "🔎 Languages terlihat (setelah download):"
+            "$BUNDLE/codeql" resolve languages --search-path="$SEARCH_PATH"
 
             cd "$WORKSPACE"
             mkdir -p reports
 
-            # Create DB (pakai Docker golang utk build) + search-path ke bundle
-            "$TOOLS/current/codeql" database create codeql-db-go \
+            # 3) Buat database (build Go via Docker) + pakai SEARCH_PATH gabungan
+            "$BUNDLE/codeql" database create codeql-db-go \
                 --overwrite \
                 --language=go \
                 --source-root . \
                 --search-path="$SEARCH_PATH" \
                 --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
 
-            # (opsional) download query pack tambahan — tetap gunakan search-path bundle
-            "$TOOLS/current/codeql" pack download codeql/go-queries --search-path="$SEARCH_PATH" || true
-
-            # Analyze (SARIF 2.1.0)
-            "$TOOLS/current/codeql" database analyze codeql-db-go \
+            # 4) Analisis (SARIF 2.1.0)
+            "$BUNDLE/codeql" database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
                 --search-path="$SEARCH_PATH" \
                 --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0 || true
