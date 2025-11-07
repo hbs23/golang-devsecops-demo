@@ -45,7 +45,13 @@ pipeline {
         }
         post {
             always {
-            archiveArtifacts artifacts: 'coverage.out', onlyIfSuccessful: true
+                script {
+                if (fileExists('coverage.out')) {
+                    archiveArtifacts artifacts: 'coverage.out', fingerprint: true
+                } else {
+                    echo 'No coverage.out generated (no Go packages / tests skipped).'
+                }
+                }
             }
         }
     }
