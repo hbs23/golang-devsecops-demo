@@ -245,18 +245,27 @@ pipeline {
 
     stage('DAST - OWASP ZAP (Baseline)') {
       steps {
-        sh """
-          docker run --rm -v \$PWD:/zap/wrk/:rw --network="host" \
+        sh '''
+        set -e
+        mkdir -p reports/zap
+        chmod 777 reports/zap || true   # longgar biar gampang nulis
+
+        docker run --rm \
+            --user 0:0 \  # jalankan sebagai root supaya bisa nulis ke bind mount
+            -v "$PWD/reports/zap":/zap/wrk \
+            --network=host \
             ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
-            -t http://localhost:${APP_PORT} \
-            -r zap-baseline.html -J zap-baseline.json || true
-        """
-      }
-      post {
+            -t "http://localhost:${APP_PORT}" \
+            -r zap-baseline.html \
+            -J zap-baseline.json || true
+
+        echo "Isi reports/zap:" && ls -lah reports/zap || true
+        '''
+    }
+    post {
         always {
-          archiveArtifacts artifacts: 'zap-baseline.*', onlyIfSuccessful: false
+        archiveArtifacts artifacts: 'reports/zap/zap-baseline.*', allowEmptyArchive: false
         }
-      }
     }
   }
 
