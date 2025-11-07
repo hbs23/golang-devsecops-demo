@@ -82,42 +82,37 @@ pipeline {
             mkdir -p "$TOOLS"
             cd "$TOOLS"
 
-            # Pastikan kita pakai BUNDLE (punya extractor), bukan CLI zip
-            if [ ! -x current/codeql/codeql ]; then
+            # Pakai BUNDLE (sudah include extractor), bukan CLI zip
+            if [ ! -x current/codeql ]; then
                 echo "📦 Download CodeQL BUNDLE $VER…"
                 curl -L "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${VER}/codeql-bundle-linux64.tar.gz" -o codeql-bundle.tgz
                 rm -rf "codeql-${VER}" tmp && mkdir -p tmp
                 tar -xzf codeql-bundle.tgz -C tmp
-                # hasil ekstrak: tmp/codeql/...
                 mv tmp/codeql "codeql-${VER}"
                 ln -sfn "codeql-${VER}" current
                 rm -rf tmp codeql-bundle.tgz
+            else
+                echo "✅ CodeQL bundle sudah ada."
             fi
 
-            # DIAGNOSTIC: pastikan biner ada & executable
-            echo "🔍 List:"
-            ls -l "$TOOLS/current/codeql" || true
-            echo "🔍 File info:"
-            file "$TOOLS/current/codeql/codeql" || true
+            # Sanity check
+            ls -l "$TOOLS/current"
+            "$TOOLS/current/codeql" version
 
-            # Kadang permission hilang, paksa executable
-            chmod +x "$TOOLS/current/codeql/codeql"
-
-            # Quick run untuk memastikan loader OK
-            "$TOOLS/current/codeql/codeql" version
-
-            # --- create DB ---
             cd "$WORKSPACE"
             mkdir -p reports
 
-            "$TOOLS/current/codeql/codeql" database create codeql-db-go \
+            # Build DB (pakai Docker golang biar gak perlu Go di agent)
+            "$TOOLS/current/codeql" database create codeql-db-go \
                 --overwrite \
                 --language=go --source-root . \
                 --command='docker run --rm -v "$PWD":/work -w /work golang:1.22-alpine sh -c "apk add --no-cache git && go build ./..."'
 
-            "$TOOLS/current/codeql/codeql" pack download codeql/go-queries
+            # Download pack queries (cache di ~/.codeql/packages)
+            "$TOOLS/current/codeql" pack download codeql/go-queries
 
-            "$TOOLS/current/codeql/codeql" database analyze codeql-db-go \
+            # Analyze → SARIF 2.1.0
+            "$TOOLS/current/codeql" database analyze codeql-db-go \
                 codeql/go-queries:codeql-suites/go-security-extended.qls \
                 --format=sarifv2.1.0 --output reports/codeql.sarif --threads=0 || true
             '''
