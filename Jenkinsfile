@@ -66,10 +66,8 @@ pipeline {
 
    stage('SAST - Semgrep (Blocking)') {
         environment {
-            // Pakai level severity Semgrep: INFO, WARNING, ERROR
-            // Contoh: set ke 'ERROR' untuk blok hanya temuan ERROR
-            //         set ke 'WARNING' untuk blok WARNING+ERROR
-            SEMGREP_MIN_SEVERITY = 'ERROR'
+            // Level Semgrep: INFO, WARNING, ERROR   (atau spesial "ANY")
+            BLOCK_SEVERITY = 'ERROR'
         }
         steps {
             sh '''
@@ -80,8 +78,8 @@ pipeline {
         chmod 777 reports || true
 
         echo "== [SAST] Kirim snapshot via tar|docker =="
-        # Jalankan semgrep; jangan hentikan shell kalau semgrep exit non-zero (supaya artefak masih bisa di-archive)
-        set +e
+        # Jalankan di container; JANGAN matikan shell saat semgrep non-zero.
+        # Kita tangkap exit code sendiri supaya masih bisa ngecek /out dan buat artefak.
         tar \
         --exclude='./reports' \
         --exclude='./.trivycache' \
@@ -97,7 +95,7 @@ pipeline {
             tar -xzf - -C /src
             echo '--- Go files detected ---'
             find /src -maxdepth 3 -type f -name '*.go' -print || true
-            # --error: exit non-zero kalau ada temuan (sesuai filter --severity)
+            set +e
             semgrep \
                 --config p/golang \
                 --config p/security-audit \
@@ -106,19 +104,19 @@ pipeline {
                 --exclude '/src/.trivycache/**' \
                 --exclude '/src/node_modules/**' \
                 --exclude '/src/.git/**' \
-                --severity ${SEMGREP_MIN_SEVERITY} \
                 --json --output /out/semgrep.json \
-                --error \
                 /src
+            SEMGREP_EXIT=$?
+            set -e
             echo '[DEBUG] Container /out listing:'; ls -lah /out || true
+            exit $SEMGREP_EXIT
             "
         SEMGREP_EXIT=$?
-        set -e
 
         echo "[DEBUG] Host reports listing:"
         ls -lah reports || true
 
-        # Pastikan artefak SELALU ada (fallback jika semgrep.json belum kebentuk)
+        # Pastikan artefak SELALU ada
         if [ ! -s reports/semgrep.json ]; then
         echo "⚠️ semgrep output missing/empty — membuat fallback reports/semgrep.json"
         printf '%s\n' \
@@ -128,13 +126,58 @@ pipeline {
         '}' > reports/semgrep.json
         fi
 
-        # Propagasi status semgrep di akhir stage (biar bisa blocking)
+        # === Penilaian hasil TANPA Python ===
+        # Prefer pakai jq di host; kalau tidak ada, pakai container jq.
+        HAS_JQ=0
+        if command -v jq >/dev/null 2>&1; then HAS_JQ=1; fi
+
+        if [ "$HAS_JQ" -eq 1 ]; then
+        echo "[INFO] Menggunakan jq lokal"
+        TOTAL=$(jq -r '.results | length' reports/semgrep.json)
+        if [ "${BLOCK_SEVERITY}" = "ANY" ]; then
+            BLOCK=$TOTAL
+        else
+            # Map kebijakan: ERROR / WARNING / INFO
+            case "${BLOCK_SEVERITY}" in
+            ERROR)   BLOCK=$(jq -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "ERROR")) | length' reports/semgrep.json);;
+            WARNING) BLOCK=$(jq -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "WARNING" or . == "ERROR")) | length' reports/semgrep.json);;
+            INFO)    BLOCK=$TOTAL;;
+            *)       echo "[WARN] BLOCK_SEVERITY invalid. Default ke ERROR."; BLOCK=$(jq -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "ERROR")) | length' reports/semgrep.json);;
+            esac
+        fi
+        else
+        echo "[INFO] jq lokal tidak ada, pakai container jq"
+        TOTAL=$(docker run --rm -v "$WORKSPACE/reports:/out:ro" ghcr.io/jqlang/jq:1.7 -r '.results | length' /out/semgrep.json)
+        if [ "${BLOCK_SEVERITY}" = "ANY" ]; then
+            BLOCK=$TOTAL
+        else
+            case "${BLOCK_SEVERITY}" in
+            ERROR)   BLOCK=$(docker run --rm -v "$WORKSPACE/reports:/out:ro" ghcr.io/jqlang/jq:1.7 -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "ERROR")) | length' /out/semgrep.json);;
+            WARNING) BLOCK=$(docker run --rm -v "$WORKSPACE/reports:/out:ro" ghcr.io/jqlang/jq:1.7 -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "WARNING" or . == "ERROR")) | length' /out/semgrep.json);;
+            INFO)    BLOCK=$TOTAL;;
+            *)       echo "[WARN] BLOCK_SEVERITY invalid. Default ke ERROR."; BLOCK=$(docker run --rm -v "$WORKSPACE/reports:/out:ro" ghcr.io/jqlang/jq:1.7 -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "ERROR")) | length' /out/semgrep.json);;
+            esac
+        fi
+        fi
+
+        echo "[Semgrep] total=${TOTAL} blocking=${BLOCK} policy=${BLOCK_SEVERITY}"
+
+        # Propagasi status (blokir jika ada temuan sesuai policy ATAU proses semgrep non-zero)
+        if [ "$SEMGREP_EXIT" -ne 0 ]; then
+        echo "❌ semgrep process exit: $SEMGREP_EXIT"
         exit $SEMGREP_EXIT
+        fi
+        if [ "$BLOCK" -gt 0 ]; then
+        echo "❌ Blocking findings found (policy=${BLOCK_SEVERITY})."
+        exit 1
+        fi
+
+        echo "✅ No blocking findings (policy=${BLOCK_SEVERITY})."
+        exit 0
         '''
         }
         post {
             always {
-            // Arsipkan walau stage gagal
             archiveArtifacts artifacts: 'reports/semgrep.json', onlyIfSuccessful: false
             }
         }
