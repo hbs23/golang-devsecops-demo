@@ -66,10 +66,10 @@ pipeline {
 
    stage('SAST - Semgrep (Blocking)') {
         environment {
-            // Ubah policy di sini:
-            // - "HIGH,CRITICAL,ERROR" => hanya severity tersebut yang memblok
-            // - "ANY" => semua temuan memblok
-            BLOCK_SEVERITY = 'HIGH,CRITICAL,ERROR'
+            // Pakai level severity Semgrep: INFO, WARNING, ERROR
+            // Contoh: set ke 'ERROR' untuk blok hanya temuan ERROR
+            //         set ke 'WARNING' untuk blok WARNING+ERROR
+            SEMGREP_MIN_SEVERITY = 'ERROR'
         }
         steps {
             sh '''
@@ -80,7 +80,8 @@ pipeline {
         chmod 777 reports || true
 
         echo "== [SAST] Kirim snapshot via tar|docker =="
-        SEMGREP_EXIT=0
+        # Jalankan semgrep; jangan hentikan shell kalau semgrep exit non-zero (supaya artefak masih bisa di-archive)
+        set +e
         tar \
         --exclude='./reports' \
         --exclude='./.trivycache' \
@@ -90,33 +91,34 @@ pipeline {
         -czf - . \
         | docker run --rm -i \
             -v "$WORKSPACE/reports:/out:rw" \
-            returntocorp/semgrep:latest sh -lc '
+            returntocorp/semgrep:latest sh -lc "
             set -e
             mkdir -p /src
             tar -xzf - -C /src
-            echo "--- Go files detected ---"
-            find /src -maxdepth 3 -type f -name "*.go" -print || true
+            echo '--- Go files detected ---'
+            find /src -maxdepth 3 -type f -name '*.go' -print || true
+            # --error: exit non-zero kalau ada temuan (sesuai filter --severity)
             semgrep \
                 --config p/golang \
                 --config p/security-audit \
                 --config p/owasp-top-ten \
-                --exclude "/src/reports/**" \
-                --exclude "/src/.trivycache/**" \
-                --exclude "/src/node_modules/**" \
-                --exclude "/src/.git/**" \
-                --json -o /out/semgrep.json /src
-            echo "[DEBUG] Container /out listing:"; ls -lah /out || true
-            ' || SEMGREP_EXIT=$?
-
-        # Jika host perlu path absolut, pakai ini:
-        # docker run --rm -i -v "/var/jenkins_home/workspace/testing-pipeline-hasan_main/reports:/out:rw" ...
-
-        : "${SEMGREP_EXIT:=0}"
+                --exclude '/src/reports/**' \
+                --exclude '/src/.trivycache/**' \
+                --exclude '/src/node_modules/**' \
+                --exclude '/src/.git/**' \
+                --severity ${SEMGREP_MIN_SEVERITY} \
+                --json --output /out/semgrep.json \
+                --error \
+                /src
+            echo '[DEBUG] Container /out listing:'; ls -lah /out || true
+            "
+        SEMGREP_EXIT=$?
+        set -e
 
         echo "[DEBUG] Host reports listing:"
         ls -lah reports || true
 
-        # Pastikan artefak SELALU ada
+        # Pastikan artefak SELALU ada (fallback jika semgrep.json belum kebentuk)
         if [ ! -s reports/semgrep.json ]; then
         echo "⚠️ semgrep output missing/empty — membuat fallback reports/semgrep.json"
         printf '%s\n' \
@@ -126,29 +128,13 @@ pipeline {
         '}' > reports/semgrep.json
         fi
 
-        # Gate: Python one-liner (tanpa heredoc)
-        python3 -c 'import json,sys,os
-        p="reports/semgrep.json"
-        d=json.load(open(p))
-        results=d.get("results",[])
-        def sev(r):
-            x=(r.get("extra") or {})
-            return (x.get("metadata",{}).get("severity") or x.get("severity") or "").upper()
-        policy=os.environ.get("BLOCK_SEVERITY","HIGH,CRITICAL,ERROR").strip()
-        if policy=="ANY":
-            block=results
-        else:
-            allow=set([s.strip().upper() for s in policy.split(",") if s.strip()])
-            block=[r for r in results if sev(r) in allow]
-        print(f"🔍 [Semgrep] total={len(results)} blocking={len(block)} policy={policy}")
-        sem_exit=int(os.environ.get("SEMGREP_EXIT","0"))
-        if sem_exit!=0:
-            print(f"❌ semgrep process exit: {sem_exit}", file=sys.stderr); sys.exit(3)
-        sys.exit(1 if block else 0)'
+        # Propagasi status semgrep di akhir stage (biar bisa blocking)
+        exit $SEMGREP_EXIT
         '''
         }
         post {
             always {
+            // Arsipkan walau stage gagal
             archiveArtifacts artifacts: 'reports/semgrep.json', onlyIfSuccessful: false
             }
         }
