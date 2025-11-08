@@ -71,16 +71,20 @@ pipeline {
         mkdir -p reports
         chmod 777 reports || true
 
-        echo "== Diagnostic: cek file dari dalam container =="
-        docker run --rm -v "$PWD":/src -w /src alpine:3.20 sh -lc "pwd; ls -lah; echo '--- Go files ---'; find . -maxdepth 3 -type f -name '*.go' -print || true"
+        echo "== Diagnostic: cek file dari dalam container (pakai WORKSPACE mount) =="
+        docker run --rm -v "$WORKSPACE":/src -w /src alpine:3.20 sh -lc "pwd; ls -lah; echo '--- go files ---'; find . -maxdepth 3 -type f -name '*.go' -print || true"
 
-        echo "== Jalankan Semgrep (root user, tapi folder writeable) =="
+        # Hard fail jika .go tidak ada
+        if ! docker run --rm -v "$WORKSPACE":/src -w /src alpine:3.20 sh -lc "find . -maxdepth 3 -type f -name '*.go' -print | grep -q ."; then
+        echo "❌ No .go files visible inside container. Fix mount path."
+        exit 1
+        fi
+
+        echo "== Jalankan Semgrep (root user, WORKSPACE mount) =="
         set +e
-        docker run --rm \
-        -v "$PWD":/src -w /src \
-        returntocorp/semgrep:latest sh -lc "
-            chmod -R 777 /src/reports || true
-            semgrep \
+        docker run --rm -v "$WORKSPACE":/src -w /src returntocorp/semgrep:latest sh -lc "
+        chmod -R 777 /src/reports || true
+        semgrep \
             --config p/golang \
             --config p/security-audit \
             --config p/owasp-top-ten \
@@ -93,10 +97,8 @@ pipeline {
         rc=$?
         set -e
 
-        # Fallback: kalau report belum ada, buat kosong
         [ -s reports/semgrep.json ] || echo '{}' > reports/semgrep.json
 
-        # Gate
         python3 -c "import json,sys; d=json.load(open('reports/semgrep.json')); n=len(d.get('results',[])); print(f'[Semgrep] findings={n}'); sys.exit(1 if n>0 else 0)"
             '''
         }
