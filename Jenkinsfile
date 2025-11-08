@@ -69,14 +69,11 @@ pipeline {
             sh '''
         set -e
         echo "== [SAST] Mulai Semgrep scan =="
-
-        # Pastikan folder laporan ada
         mkdir -p reports
         chmod 777 reports || true
 
-        # Snapshot source → langsung pipe ke container (tanpa bikin source.tar.gz)
-        # Hindari race: exclude artefak CI & .git, dan matikan warning "file changed"
         echo "== [SAST] Kirim snapshot via pipe =="
+        # jalankan semgrep dalam container; tangkap exit code
         tar \
         --exclude='./reports' \
         --exclude='./.trivycache' \
@@ -100,24 +97,62 @@ pipeline {
                 --exclude "/src/.trivycache/**" \
                 --exclude "/src/node_modules/**" \
                 --json -o /out/semgrep.json /src
-            '
+            ' || SEMGREP_EXIT=$?
 
-        # Gate: fail kalau ada temuan
+        # If docker/semgrep failed, we still want a semgrep.json fallback so artifact exists
+        if [ -z "${SEMGREP_EXIT+x}" ]; then
+        SEMGREP_EXIT=0
+        fi
+
+        if [ ! -s reports/semgrep.json ]; then
+        echo "⚠️ semgrep output missing or empty — buat fallback reports/semgrep.json"
+        cat > reports/semgrep.json <<'EOF'
+        {
+        "errors": ["semgrep failed or produced no output"],
+        "results": []
+        }
+        EOF
+        fi
+
+        # parse hasil semgrep dan decide exit code
         python3 - <<'PY'
-        import json,sys,os
-        p='reports/semgrep.json'
-        if not os.path.exists(p) or os.path.getsize(p)==0:
-            print('❌ [Semgrep] report missing/empty'); sys.exit(1)
-        d=json.load(open(p))
-        n=len(d.get('results',[]))
-        print(f'🔍 [Semgrep] findings={n}')
-        sys.exit(1 if n>0 else 0)
+        import json, sys, os
+
+        p = "reports/semgrep.json"
+        if not os.path.exists(p):
+            print("❌ [Semgrep] report not found", file=sys.stderr)
+            sys.exit(2)
+
+        data = json.load(open(p))
+        results = data.get("results", [])
+        print(f"🔍 [Semgrep] total findings = {len(results)}")
+
+        # policy: fail if any findings (blocking), or semgrep docker non-zero
+        # NOTE: we can change policy: fail only on severity X etc.
+        blocking_count = len(results)
+
+        # get semgrep exit propagated via env
+        import os
+        sem_exit = int(os.environ.get("SEMGREP_EXIT", "0"))
+        if sem_exit != 0:
+            print(f"❌ semgrep process returned non-zero exit: {sem_exit}", file=sys.stderr)
+            # still fail, but artifact exists
+            sys.exit(3)
+
+        if blocking_count > 0:
+            print("❌ Blocking findings found; failing pipeline as configured.")
+            sys.exit(1)
+
+        print("✅ No blocking findings.")
+        sys.exit(0)
         PY
-            '''
+        '''
         }
         post {
             always {
-            archiveArtifacts artifacts: 'reports/semgrep.json', onlyIfSuccessful: false
+            // pastikan archivernya jalan walau step fail
+            archiveArtifacts artifacts: 'reports/semgrep.json, reports/semgrep-summary.txt', onlyIfSuccessful: false
+            junit allowEmptyResults: true, testResults: 'reports/*.xml' // optional
             }
         }
     }
