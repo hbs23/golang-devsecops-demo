@@ -66,20 +66,20 @@ pipeline {
 
    stage('SAST - Semgrep (Blocking)') {
         environment {
-            // Level Semgrep: INFO, WARNING, ERROR   (atau spesial "ANY")
-            BLOCK_SEVERITY = 'ERROR'
+            // INFO / WARNING / ERROR  (Semgrep levels). Pakai ERROR utk blok yg berat saja.
+            SEMGREP_MIN_SEVERITY = 'ERROR'
         }
         steps {
             sh '''
-        set -e
+        set -euo pipefail
 
-        echo "== [SAST] Mulai Semgrep scan =="
+        echo "== [SAST] Mulai Semgrep scan (no mount) =="
         mkdir -p reports
         chmod 777 reports || true
 
-        echo "== [SAST] Kirim snapshot via tar|docker =="
-        # Jalankan di container; JANGAN matikan shell saat semgrep non-zero.
-        # Kita tangkap exit code sendiri supaya masih bisa ngecek /out dan buat artefak.
+        # Kirim source via stdin → ekstrak di /src dalam kontainer
+        # KELUARKAN JSON ke stdout → redirect ke reports/semgrep.json di kontainer Jenkins
+        set +e
         tar \
         --exclude='./reports' \
         --exclude='./.trivycache' \
@@ -87,36 +87,30 @@ pipeline {
         --exclude='./.git' \
         --warning=no-file-changed \
         -czf - . \
-        | docker run --rm -i \
-            -v "$WORKSPACE/reports:/out:rw" \
-            returntocorp/semgrep:latest sh -lc "
+        | docker run --rm -i returntocorp/semgrep:latest sh -lc '
             set -e
             mkdir -p /src
-            tar -xzf - -C /src
-            echo '--- Go files detected ---'
-            find /src -maxdepth 3 -type f -name '*.go' -print || true
-            set +e
+            tar -xzf - -C /src 2>/dev/null
             semgrep \
-                --config p/golang \
-                --config p/security-audit \
-                --config p/owasp-top-ten \
-                --exclude '/src/reports/**' \
-                --exclude '/src/.trivycache/**' \
-                --exclude '/src/node_modules/**' \
-                --exclude '/src/.git/**' \
-                --json --output /out/semgrep.json \
-                /src
-            SEMGREP_EXIT=$?
-            set -e
-            echo '[DEBUG] Container /out listing:'; ls -lah /out || true
-            exit $SEMGREP_EXIT
-            "
+            --config p/golang \
+            --config p/security-audit \
+            --config p/owasp-top-ten \
+            --exclude "/src/reports/**" \
+            --exclude "/src/.trivycache/**" \
+            --exclude "/src/node_modules/**" \
+            --exclude "/src/.git/**" \
+            --severity "${SEMGREP_MIN_SEVERITY}" \
+            --json --output /dev/stdout \
+            --error \
+            /src
+        ' > reports/semgrep.json
         SEMGREP_EXIT=$?
+        set -e
 
         echo "[DEBUG] Host reports listing:"
         ls -lah reports || true
 
-        # Pastikan artefak SELALU ada
+        # Pastikan artefak selalu ada
         if [ ! -s reports/semgrep.json ]; then
         echo "⚠️ semgrep output missing/empty — membuat fallback reports/semgrep.json"
         printf '%s\n' \
@@ -126,54 +120,8 @@ pipeline {
         '}' > reports/semgrep.json
         fi
 
-        # === Penilaian hasil TANPA Python ===
-        # Prefer pakai jq di host; kalau tidak ada, pakai container jq.
-        HAS_JQ=0
-        if command -v jq >/dev/null 2>&1; then HAS_JQ=1; fi
-
-        if [ "$HAS_JQ" -eq 1 ]; then
-        echo "[INFO] Menggunakan jq lokal"
-        TOTAL=$(jq -r '.results | length' reports/semgrep.json)
-        if [ "${BLOCK_SEVERITY}" = "ANY" ]; then
-            BLOCK=$TOTAL
-        else
-            # Map kebijakan: ERROR / WARNING / INFO
-            case "${BLOCK_SEVERITY}" in
-            ERROR)   BLOCK=$(jq -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "ERROR")) | length' reports/semgrep.json);;
-            WARNING) BLOCK=$(jq -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "WARNING" or . == "ERROR")) | length' reports/semgrep.json);;
-            INFO)    BLOCK=$TOTAL;;
-            *)       echo "[WARN] BLOCK_SEVERITY invalid. Default ke ERROR."; BLOCK=$(jq -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "ERROR")) | length' reports/semgrep.json);;
-            esac
-        fi
-        else
-        echo "[INFO] jq lokal tidak ada, pakai container jq"
-        TOTAL=$(docker run --rm -v "$WORKSPACE/reports:/out:ro" ghcr.io/jqlang/jq:1.7 -r '.results | length' /out/semgrep.json)
-        if [ "${BLOCK_SEVERITY}" = "ANY" ]; then
-            BLOCK=$TOTAL
-        else
-            case "${BLOCK_SEVERITY}" in
-            ERROR)   BLOCK=$(docker run --rm -v "$WORKSPACE/reports:/out:ro" ghcr.io/jqlang/jq:1.7 -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "ERROR")) | length' /out/semgrep.json);;
-            WARNING) BLOCK=$(docker run --rm -v "$WORKSPACE/reports:/out:ro" ghcr.io/jqlang/jq:1.7 -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "WARNING" or . == "ERROR")) | length' /out/semgrep.json);;
-            INFO)    BLOCK=$TOTAL;;
-            *)       echo "[WARN] BLOCK_SEVERITY invalid. Default ke ERROR."; BLOCK=$(docker run --rm -v "$WORKSPACE/reports:/out:ro" ghcr.io/jqlang/jq:1.7 -r '[.results[] | ((.extra.metadata.severity // .extra.severity // "") | ascii_upcase) ] | map(select(. == "ERROR")) | length' /out/semgrep.json);;
-            esac
-        fi
-        fi
-
-        echo "[Semgrep] total=${TOTAL} blocking=${BLOCK} policy=${BLOCK_SEVERITY}"
-
-        # Propagasi status (blokir jika ada temuan sesuai policy ATAU proses semgrep non-zero)
-        if [ "$SEMGREP_EXIT" -ne 0 ]; then
-        echo "❌ semgrep process exit: $SEMGREP_EXIT"
+        # Blok sesuai exit code Semgrep (karena --error aktif)
         exit $SEMGREP_EXIT
-        fi
-        if [ "$BLOCK" -gt 0 ]; then
-        echo "❌ Blocking findings found (policy=${BLOCK_SEVERITY})."
-        exit 1
-        fi
-
-        echo "✅ No blocking findings (policy=${BLOCK_SEVERITY})."
-        exit 0
         '''
         }
         post {
