@@ -68,38 +68,50 @@ pipeline {
         steps {
             sh '''
         set -e
+        echo "== [SAST] Mulai Semgrep scan =="
+
+        # 1️⃣ Siapkan folder reports
         mkdir -p reports
         chmod 777 reports || true
 
-        echo "== Diagnostic: cek file dari dalam container (pakai WORKSPACE mount) =="
-        docker run --rm -v "$WORKSPACE":/src -w /src alpine:3.20 sh -lc "pwd; ls -lah; echo '--- go files ---'; find . -maxdepth 3 -type f -name '*.go' -print || true"
+        # 2️⃣ Buat snapshot source dalam bentuk tar (biar path Jenkins aman)
+        echo "== [SAST] Buat snapshot source (tanpa artefak CI) =="
+        tar --exclude='./reports' \
+            --exclude='./.trivycache' \
+            --exclude='./node_modules' \
+            --exclude='./.git' \
+            -czf source.tar.gz .
 
-        # Hard fail jika .go tidak ada
-        if ! docker run --rm -v "$WORKSPACE":/src -w /src alpine:3.20 sh -lc "find . -maxdepth 3 -type f -name '*.go' -print | grep -q ."; then
-        echo "❌ No .go files visible inside container. Fix mount path."
-        exit 1
-        fi
-
-        echo "== Jalankan Semgrep (root user, WORKSPACE mount) =="
-        set +e
-        docker run --rm -v "$WORKSPACE":/src -w /src returntocorp/semgrep:latest sh -lc "
-        chmod -R 777 /src/reports || true
-        semgrep \
+        # 3️⃣ Jalankan Semgrep di container, ekstrak source di /src
+        echo "== [SAST] Jalankan Semgrep dalam container (independen dari bind mount) =="
+        docker run --rm -i \
+        -v "$WORKSPACE/reports":/out \
+        returntocorp/semgrep:latest sh -lc '
+            mkdir -p /src && tar -xzf - -C /src && \
+            echo "--- File Go yang ditemukan ---" && find /src -maxdepth 3 -type f -name "*.go" && \
+            semgrep \
             --config p/golang \
             --config p/security-audit \
             --config p/owasp-top-ten \
-            --exclude 'reports/**' \
-            --exclude '.trivycache/**' \
-            --exclude 'node_modules/**' \
-            --no-git-ignore \
-            --json -o reports/semgrep.json .
-        "
-        rc=$?
-        set -e
+            --exclude "/src/reports/**" \
+            --exclude "/src/.trivycache/**" \
+            --exclude "/src/node_modules/**" \
+            --json -o /out/semgrep.json /src
+        ' < source.tar.gz
 
-        [ -s reports/semgrep.json ] || echo '{}' > reports/semgrep.json
-
-        python3 -c "import json,sys; d=json.load(open('reports/semgrep.json')); n=len(d.get('results',[])); print(f'[Semgrep] findings={n}'); sys.exit(1 if n>0 else 0)"
+        # 4️⃣ Validasi hasil dan hentikan pipeline kalau ada finding
+        echo "== [SAST] Validasi hasil semgrep.json =="
+        python3 - <<'PY'
+        import json, sys, os
+        path = "reports/semgrep.json"
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            print("❌ [Semgrep] Tidak ada laporan atau file kosong.")
+            sys.exit(1)
+        data = json.load(open(path))
+        findings = len(data.get("results", []))
+        print(f"🔍 [Semgrep] Jumlah temuan: {findings}")
+        sys.exit(1 if findings > 0 else 0)
+        PY
             '''
         }
         post {
